@@ -1,0 +1,218 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    :root {
+        --background: 220 15% 5%;
+        --foreground: 210 40% 98%;
+        --card: 220 15% 8%;
+        --card-foreground: 210 40% 98%;
+        --popover: 220 15% 8%;
+        --popover-foreground: 210 40% 98%;
+        --primary: 177 94% 70%;
+        --primary-foreground: 220 15% 5%;
+        --secondary: 173 38% 45%;
+        --secondary-foreground: 210 40% 98%;
+        --muted: 220 15% 15%;
+        --muted-foreground: 215 20% 65%;
+        --accent: 220 15% 15%;
+        --accent-foreground: 210 40% 98%;
+        --destructive: 0 84% 60%;
+        --destructive-foreground: 210 40% 98%;
+        --border: 220 15% 18%;
+        --input: 220 15% 18%;
+        --ring: 177 94% 70%;
+        --chart-1: 37 91% 55%;
+        --chart-2: 160 84% 39%;
+        --chart-3: 217 91% 60%;
+        --chart-4: 0 84% 60%;
+        --chart-5: 177 94% 70%;
+        --radius: 0.75rem;
+    }
+
+    .light {
+        --background: 0 0% 98%;
+        --foreground: 220 15% 10%;
+        --card: 0 0% 100%;
+        --card-foreground: 220 15% 10%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 220 15% 10%;
+        --primary: 177 70% 35%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 173 38% 40%;
+        --secondary-foreground: 0 0% 100%;
+        --muted: 220 15% 92%;
+        --muted-foreground: 220 15% 40%;
+        --accent: 220 15% 92%;
+        --accent-foreground: 220 15% 10%;
+        --destructive: 0 84% 60%;
+        --destructive-foreground: 0 0% 100%;
+        --border: 220 15% 85%;
+        --input: 220 15% 85%;
+        --ring: 177 70% 35%;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+    
+    html {
+        @apply scroll-smooth;
+    }
+    
+    body {
+        @apply bg-background text-foreground font-inter antialiased;
+        background-color: hsl(var(--background));
+        min-height: 100vh;
+    }
+}
+
+@layer utilities {
+    .glass-card {
+        @apply backdrop-blur-xl bg-black/40 border border-white/10 shadow-2xl;
+    }
+    
+    .glass-card-light {
+        @apply backdrop-blur-xl bg-white/80 border border-black/10 shadow-xl;
+    }
+    
+    .light .glass-card {
+        @apply backdrop-blur-xl bg-white/80 border border-black/10 shadow-xl;
+    }
+    
+    .neon-text-primary {
+        text-shadow: 0 0 10px rgba(102, 252, 241, 0.5);
+    }
+    
+    .neon-text-solar {
+        text-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+    }
+    
+    .neon-text-battery {
+        text-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+    }
+    
+    .neon-text-grid {
+        text-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+    }
+    
+    .scrollbar-thin {
+        scrollbar-width: thin;
+        scrollbar-color: hsl(var(--muted)) transparent;
+    }
+    
+    .scrollbar-thin::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+    
+    .scrollbar-thin::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+        background: hsl(var(--muted));
+        border-radius: 3px;
+    }
+}
+
+@layer components {
+    .btn-primary {
+        @apply bg-primary text-primary-foreground font-rajdhani font-bold uppercase tracking-wider px-6 py-2 rounded-lg;
+        @apply hover:bg-primary/90 transition-colors duration-200;
+        @apply shadow-glow-primary;
+    }
+    
+    .btn-ghost {
+        @apply bg-transparent text-foreground font-rajdhani uppercase tracking-wider px-4 py-2 rounded-lg;
+        @apply hover:bg-white/10 transition-colors duration-200;
+    }
+    
+    .input-glass {
+        @apply bg-white/5 border border-white/10 rounded-lg px-4 py-2;
+        @apply focus:border-primary/50 focus:ring-1 focus:ring-primary/50 focus:outline-none;
+        @apply placeholder:text-white/30 transition-colors duration-200;
+    }
+    
+    .light .input-glass {
+        @apply bg-black/5 border-black/10 placeholder:text-black/30;
+    }
+    
+    .status-ring {
+        @apply relative w-20 h-20 rounded-full;
+    }
+    
+    .status-ring::before {
+        content: '';
+        @apply absolute inset-0 rounded-full border-4 border-white/10;
+    }
+    
+    .status-ring-solar::after {
+        content: '';
+        @apply absolute inset-0 rounded-full border-4 border-solar border-t-transparent animate-ring-spin;
+    }
+    
+    .status-ring-battery::after {
+        content: '';
+        @apply absolute inset-0 rounded-full border-4 border-battery border-t-transparent animate-ring-spin;
+    }
+    
+    .card-header {
+        @apply flex items-center justify-between mb-4 pb-3 border-b border-white/10;
+    }
+    
+    .light .card-header {
+        @apply border-black/10;
+    }
+}
+
+/* Power flow animation */
+.flow-path {
+    stroke-dasharray: 10 5;
+    animation: dash 1s linear infinite;
+}
+
+@keyframes dash {
+    to {
+        stroke-dashoffset: -15;
+    }
+}
+
+/* Grid pattern background */
+.grid-pattern {
+    background-image: 
+        linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    background-size: 50px 50px;
+}
+
+.light .grid-pattern {
+    background-image: 
+        linear-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+}
+
+/* Gradient overlays */
+.gradient-solar {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, transparent 100%);
+}
+
+.gradient-battery {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, transparent 100%);
+}
+
+.gradient-grid {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, transparent 100%);
+}
+
+.gradient-load {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, transparent 100%);
+}
+
+/* Debug wrapper */
+[data-debug-wrapper="true"] {
+    display: contents !important;
+}

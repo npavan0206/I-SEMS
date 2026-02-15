@@ -1,0 +1,123 @@
+.App {
+    min-height: 100vh;
+}
+
+/* Responsive typography */
+@media (max-width: 640px) {
+    .text-responsive-4xl {
+        font-size: 1.875rem;
+    }
+}
+
+/* Card hover effects */
+.card-hover {
+    transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.card-hover:hover {
+    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.light .card-hover:hover {
+    border-color: rgba(0, 0, 0, 0.2);
+}
+
+/* Status indicator pulse */
+.status-pulse {
+    position: relative;
+}
+
+.status-pulse::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: inherit;
+    opacity: 0.4;
+    animation: pulse-ring 2s ease-out infinite;
+}
+
+@keyframes pulse-ring {
+    0% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0.4;
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(1.5);
+        opacity: 0;
+    }
+}
+
+/* Chart tooltips */
+.recharts-tooltip-wrapper {
+    z-index: 100 !important;
+}
+
+/* SVG flow animations */
+.flow-active {
+    stroke-dasharray: 8 4;
+    animation: flow 0.5s linear infinite;
+}
+
+@keyframes flow {
+    to {
+        stroke-dashoffset: -12;
+    }
+}
+
+/* Neon border effect */
+.neon-border-solar {
+    box-shadow: inset 0 0 20px rgba(245, 158, 11, 0.1),
+                0 0 20px rgba(245, 158, 11, 0.2);
+}
+
+.neon-border-battery {
+    box-shadow: inset 0 0 20px rgba(16, 185, 129, 0.1),
+                0 0 20px rgba(16, 185, 129, 0.2);
+}
+
+.neon-border-grid {
+    box-shadow: inset 0 0 20px rgba(59, 130, 246, 0.1),
+                0 0 20px rgba(59, 130, 246, 0.2);
+}
+
+.neon-border-load {
+    box-shadow: inset 0 0 20px rgba(239, 68, 68, 0.1),
+                0 0 20px rgba(239, 68, 68, 0.2);
+}
+
+/* Loading skeleton */
+.skeleton {
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.05) 25%,
+        rgba(255, 255, 255, 0.1) 50%,
+        rgba(255, 255, 255, 0.05) 75%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s infinite;
+}
+
+.light .skeleton {
+    background: linear-gradient(
+        90deg,
+        rgba(0, 0, 0, 0.05) 25%,
+        rgba(0, 0, 0, 0.1) 50%,
+        rgba(0, 0, 0, 0.05) 75%
+    );
+    background-size: 200% 100%;
+}
+
+@keyframes skeleton-loading {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
