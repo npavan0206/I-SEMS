@@ -1,5 +1,15 @@
+// API Service for ISEMS Frontend
+// Ensure REACT_APP_BACKEND_URL is set in environment variables
+
 const API_URL = process.env.REACT_APP_BACKEND_URL;
-const WS_URL = process.env.REACT_APP_WS_URL || API_URL?.replace('https://', 'wss://').replace('http://', 'ws://') + '/ws';
+if (!API_URL) {
+  throw new Error(
+    'REACT_APP_BACKEND_URL is not defined. Please set it in your environment variables.'
+  );
+}
+
+const WS_URL = process.env.REACT_APP_WS_URL || 
+  (API_URL ? API_URL.replace('https://', 'wss://').replace('http://', 'ws://') + '/ws' : null);
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem('isems-token');
@@ -137,8 +147,10 @@ export const api = {
 
 // WebSocket connection
 export const createWebSocket = (token) => {
-  const wsUrl = WS_URL || API_URL.replace('https://', 'wss://').replace('http://', 'ws://') + '/ws';
-  const ws = new WebSocket(`${wsUrl}?token=${token || ''}`);
+  if (!WS_URL) {
+    throw new Error('WebSocket URL could not be constructed. Check REACT_APP_BACKEND_URL or set REACT_APP_WS_URL.');
+  }
+  const ws = new WebSocket(`${WS_URL}?token=${token || ''}`);
   return ws;
 };
 
