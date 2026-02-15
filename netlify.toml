@@ -1,0 +1,27 @@
+# Netlify Build Configuration
+[build]
+  base = "frontend"
+  publish = "build"
+  command = "yarn build"
+
+[build.environment]
+  CI = "false"
+  NODE_VERSION = "18"
+
+# Environment variables (set in Netlify Dashboard)
+# REACT_APP_BACKEND_URL = https://your-railway-backend.up.railway.app
+# REACT_APP_WS_URL = wss://your-railway-backend.up.railway.app/ws
+
+# SPA routing - redirect all routes to index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Security headers
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
