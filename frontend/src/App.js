@@ -1,157 +1,163 @@
-// API Service for ISEMS Frontend
-// Ensure REACT_APP_BACKEND_URL is set in environment variables
+import { useState, useEffect, createContext, useContext } from "react";
+import "@/App.css";
+import "@/index.css";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Toaster } from "@/components/ui/sonner";
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
-if (!API_URL) {
-  throw new Error(
-    'REACT_APP_BACKEND_URL is not defined. Please set it in your environment variables.'
+// Pages
+import LoginPage from "@/pages/LoginPage";
+import DashboardPage from "@/pages/DashboardPage";
+import SolarPage from "@/pages/SolarPage";
+import BatteryPage from "@/pages/BatteryPage";
+import LoadPage from "@/pages/LoadPage";
+import GridPage from "@/pages/GridPage";
+import ChartsPage from "@/pages/ChartsPage";
+
+// Create Auth Context
+const AuthContext = createContext(null);
+
+export const useAuth = () => useContext(AuthContext);
+
+// Theme Context
+const ThemeContext = createContext(null);
+
+export const useTheme = () => useContext(ThemeContext);
+
+const ThemeProvider = ({ children }) => {
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem('isems-theme');
+    return saved || 'dark';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('isems-theme', theme);
+    document.documentElement.classList.remove('light', 'dark');
+    document.documentElement.classList.add(theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  };
+
+  return (
+    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+};
+
+const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(() => localStorage.getItem('isems-token'));
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const validateToken = async () => {
+      if (token) {
+        try {
+          const API_URL = process.env.REACT_APP_BACKEND_URL;
+          const response = await fetch(`${API_URL}/api/auth/me`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (response.ok) {
+            const userData = await response.json();
+            setUser(userData);
+          } else {
+            logout();
+          }
+        } catch (error) {
+          console.error('Token validation error:', error);
+          logout();
+        }
+      }
+      setLoading(false);
+    };
+    validateToken();
+  }, [token]);
+
+  const login = (accessToken, userData) => {
+    localStorage.setItem('isems-token', accessToken);
+    setToken(accessToken);
+    setUser(userData);
+  };
+
+  const logout = () => {
+    localStorage.removeItem('isems-token');
+    setToken(null);
+    setUser(null);
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, token, login, logout, loading }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+const ProtectedRoute = ({ children }) => {
+  const { token, loading } = useAuth();
+  
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-pulse text-primary font-rajdhani text-xl">Loading...</div>
+      </div>
+    );
+  }
+  
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  return children;
+};
+
+function App() {
+  return (
+    <ThemeProvider>
+      <AuthProvider>
+        <div className="App min-h-screen bg-background">
+          <Toaster position="top-right" richColors />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/" element={
+                <ProtectedRoute>
+                  <DashboardPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/solar" element={
+                <ProtectedRoute>
+                  <SolarPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/battery" element={
+                <ProtectedRoute>
+                  <BatteryPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/load" element={
+                <ProtectedRoute>
+                  <LoadPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/grid" element={
+                <ProtectedRoute>
+                  <GridPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/charts" element={
+                <ProtectedRoute>
+                  <ChartsPage />
+                </ProtectedRoute>
+              } />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </BrowserRouter>
+        </div>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 
-const WS_URL = process.env.REACT_APP_WS_URL || 
-  (API_URL ? API_URL.replace('https://', 'wss://').replace('http://', 'ws://') + '/ws' : null);
-
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('isems-token');
-  return {
-    'Content-Type': 'application/json',
-    ...(token && { Authorization: `Bearer ${token}` })
-  };
-};
-
-export const api = {
-  // Auth
-  login: async (email, password) => {
-    const response = await fetch(`${API_URL}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-    if (!response.ok) throw new Error('Invalid credentials');
-    return response.json();
-  },
-
-  register: async (email, password, name) => {
-    const response = await fetch(`${API_URL}/api/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, name })
-    });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Registration failed');
-    }
-    return response.json();
-  },
-
-  // Dashboard
-  getDashboard: async () => {
-    const response = await fetch(`${API_URL}/api/dashboard`, {
-      headers: getAuthHeaders()
-    });
-    if (!response.ok) throw new Error('Failed to fetch dashboard');
-    return response.json();
-  },
-
-  getDashboardPublic: async () => {
-    const response = await fetch(`${API_URL}/api/dashboard/public`);
-    if (!response.ok) throw new Error('Failed to fetch dashboard');
-    return response.json();
-  },
-
-  // Solar
-  getSolar: async () => {
-    const response = await fetch(`${API_URL}/api/solar`, {
-      headers: getAuthHeaders()
-    });
-    if (!response.ok) throw new Error('Failed to fetch solar data');
-    return response.json();
-  },
-
-  // Battery
-  getBattery: async () => {
-    const response = await fetch(`${API_URL}/api/battery`, {
-      headers: getAuthHeaders()
-    });
-    if (!response.ok) throw new Error('Failed to fetch battery data');
-    return response.json();
-  },
-
-  // Load
-  getLoad: async () => {
-    const response = await fetch(`${API_URL}/api/load`, {
-      headers: getAuthHeaders()
-    });
-    if (!response.ok) throw new Error('Failed to fetch load data');
-    return response.json();
-  },
-
-  controlLoad: async (device, state) => {
-    const response = await fetch(`${API_URL}/api/load/control`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ device, state })
-    });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to control load');
-    }
-    return response.json();
-  },
-
-  // Grid
-  getGrid: async () => {
-    const response = await fetch(`${API_URL}/api/grid`, {
-      headers: getAuthHeaders()
-    });
-    if (!response.ok) throw new Error('Failed to fetch grid data');
-    return response.json();
-  },
-
-  setGridMode: async (mode) => {
-    const response = await fetch(`${API_URL}/api/grid/mode?mode=${mode}`, {
-      method: 'POST',
-      headers: getAuthHeaders()
-    });
-    if (!response.ok) throw new Error('Failed to set grid mode');
-    return response.json();
-  },
-
-  // Predictions
-  getPredictions: async () => {
-    const response = await fetch(`${API_URL}/api/predictions`, {
-      headers: getAuthHeaders()
-    });
-    if (!response.ok) throw new Error('Failed to fetch predictions');
-    return response.json();
-  },
-
-  // History
-  getHistory: async (results = 100) => {
-    const response = await fetch(`${API_URL}/api/history?results=${results}`, {
-      headers: getAuthHeaders()
-    });
-    if (!response.ok) throw new Error('Failed to fetch history');
-    return response.json();
-  },
-
-  // Export
-  exportCSV: async () => {
-    const response = await fetch(`${API_URL}/api/export/csv`, {
-      headers: getAuthHeaders()
-    });
-    if (!response.ok) throw new Error('Failed to export CSV');
-    return response.json();
-  }
-};
-
-// WebSocket connection
-export const createWebSocket = (token) => {
-  if (!WS_URL) {
-    throw new Error('WebSocket URL could not be constructed. Check REACT_APP_BACKEND_URL or set REACT_APP_WS_URL.');
-  }
-  const ws = new WebSocket(`${WS_URL}?token=${token || ''}`);
-  return ws;
-};
-
-export default api;
+export default App;
