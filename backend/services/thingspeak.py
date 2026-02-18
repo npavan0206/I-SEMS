@@ -51,9 +51,9 @@ class ThingSpeakService:
             return feeds[0]
         return None
 
-    async def check_online(self, max_age_seconds: int = 300) -> bool:
+    async def check_online(self, max_age_seconds: int = 60) -> bool:
         """Check if the device is online by verifying a recent feed.
-        Returns True if the latest feed is newer than max_age_seconds."""
+        Returns True if the latest feed is newer than max_age_seconds (default 60s)."""
         latest = await self.fetch_latest()
         if not latest:
             return False
