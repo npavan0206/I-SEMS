@@ -222,7 +222,8 @@ async def get_solar_data(payload: dict = Depends(verify_token)):
                 "power": solar_v * solar_i
             })
 
-    predictions = predictor.get_predictions()
+    # Await the async predictor
+    predictions = await predictor.get_predictions()
 
     return {
         "current": data.solar.model_dump(),
@@ -249,10 +250,15 @@ async def get_battery_data(payload: dict = Depends(verify_token)):
                 "soc": parse_float(feed.get('field3'))
             })
 
+    # Optionally add battery status from predictions
+    predictions = await predictor.get_predictions()
+    status_text = predictions.get("battery_status", "")
+
     return {
         "current": data.battery.model_dump(),
         "history": history,
-        "device_online": data.device_online
+        "device_online": data.device_online,
+        "status_text": status_text  # Add this field for frontend
     }
 
 # ==================== LOAD ROUTES ====================
@@ -277,7 +283,8 @@ async def get_load_data(payload: dict = Depends(verify_token)):
     load_data = data.load.model_dump()
     load_data.update(load_states)
 
-    predictions = predictor.get_predictions()
+    # Await predictor for load demand
+    predictions = await predictor.get_predictions()
 
     return {
         "current": load_data,
@@ -340,7 +347,8 @@ async def set_grid_mode(mode: str, payload: dict = Depends(verify_token)):
 
 @api_router.get("/predictions")
 async def get_ai_predictions(payload: dict = Depends(verify_token)):
-    return predictor.get_predictions()
+    predictions = await predictor.get_predictions()
+    return predictions
 
 # ==================== HISTORY ROUTES ====================
 
