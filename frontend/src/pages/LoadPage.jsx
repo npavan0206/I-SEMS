@@ -18,16 +18,15 @@ import { toast } from 'sonner';
 
 export default function LoadPage() {
   const [loadData, setLoadData] = useState(null);
-  const [predictions, setPredictions] = useState(null); // NEW: store AI predictions
+  const [predictions, setPredictions] = useState(null);
   const [loading, setLoading] = useState(true);
   const [controlling, setControlling] = useState({});
 
   const fetchData = useCallback(async () => {
     try {
-      // Fetch load data and predictions in parallel
       const [loadResponse, predResponse] = await Promise.all([
         api.getLoad(),
-        api.getPredictions()  // NEW: call /predictions endpoint
+        api.getPredictions()
       ]);
       setLoadData(loadResponse);
       setPredictions(predResponse);
@@ -49,7 +48,7 @@ export default function LoadPage() {
     try {
       await api.controlLoad(device, !currentState);
       toast.success(`${device.charAt(0).toUpperCase() + device.slice(1)} ${!currentState ? 'enabled' : 'disabled'}`);
-      await fetchData(); // refresh both load and predictions
+      await fetchData();
     } catch (error) {
       toast.error(error.message || `Failed to control ${device}`);
     } finally {
@@ -76,7 +75,6 @@ export default function LoadPage() {
   const current = loadData?.current || {};
   const deviceOnline = loadData?.device_online ?? false;
 
-  // Determine load tiers and lock status
   const loads = [
     {
       id: 'light',
@@ -110,7 +108,6 @@ export default function LoadPage() {
     }
   ];
 
-  // NEW: Extract battery status from predictions
   const batteryStatus = predictions?.battery_status || "Insufficient data for prediction";
 
   return (
@@ -213,6 +210,7 @@ export default function LoadPage() {
                       onCheckedChange={() => handleToggle(load.id, load.isOn)}
                       disabled={controlling[load.id] || !deviceOnline}
                       data-testid={`toggle-${load.id}`}
+                      className={load.isOn ? 'bg-green-500' : 'bg-red-500'} // Green when on, red when off
                     />
                   )}
                 </div>
@@ -291,19 +289,17 @@ export default function LoadPage() {
           )}
         </div>
 
-        {/* AI Recommendations - CHANGED to show battery status */}
+        {/* AI Recommendations */}
         <div className="mt-6 glass-card rounded-2xl p-6" data-testid="load-recommendations">
           <div className="flex items-center gap-3 mb-4">
             <Brain className="w-5 h-5 text-primary" />
             <h3 className="font-rajdhani font-semibold text-lg">AI Recommendations</h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Battery Status Box */}
             <div className="p-4 rounded-xl bg-white/5 border border-white/10">
               <p className="text-sm text-muted-foreground mb-2">Battery Status</p>
               <p className="text-sm font-medium">{batteryStatus}</p>
             </div>
-            {/* Load Scheduling Box */}
             <div className="p-4 rounded-xl bg-white/5 border border-white/10">
               <p className="text-sm text-muted-foreground mb-2">Load Scheduling</p>
               <p className="text-sm">
