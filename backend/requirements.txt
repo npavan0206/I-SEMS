@@ -10,3 +10,4 @@ aiohttp
 numpy
 pandas
 scikit-learn
+PyJWT>=2.0.0
