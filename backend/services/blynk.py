@@ -1,62 +1,58 @@
-"""
-Blynk IoT Integration Service
-"""
-import httpx
+# services/blynk.py
+import aiohttp
 import logging
-from typing import Optional
-from core.config import BLYNK_BASE_URL, BLYNK_AUTH_TOKEN
+from core.config import BLYNK_AUTH_TOKEN, BLYNK_BASE_URL
 
 logger = logging.getLogger(__name__)
 
 class BlynkService:
     def __init__(self):
+        self.token = BLYNK_AUTH_TOKEN
         self.base_url = BLYNK_BASE_URL
-        self.auth_token = BLYNK_AUTH_TOKEN
-    
-    async def get_value(self, pin: str) -> Optional[str]:
-        """Get value from Blynk virtual pin"""
-        if not self.auth_token:
-            logger.warning("Blynk auth token not configured")
-            return None
-            
-        try:
-            async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
-                url = f"{self.base_url}/get"
-                params = {"token": self.auth_token, pin: ""}
-                response = await client.get(url, params=params)
-                if response.status_code == 200:
-                    return response.text.strip('[]"')
-        except Exception as e:
-            logger.error(f"Blynk get error: {e}")
-        return None
-    
+
     async def set_value(self, pin: str, value: str) -> bool:
-        """Set value on Blynk virtual pin"""
-        if not self.auth_token:
-            logger.warning("Blynk auth token not configured")
-            return False
-            
+        """Set a virtual pin value via Blynk HTTP API."""
+        url = f"{self.base_url}/update?token={self.token}&pin={pin}&value={value}"
         try:
-            async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
-                url = f"{self.base_url}/update"
-                params = {"token": self.auth_token, pin: value}
-                response = await client.get(url, params=params)
-                return response.status_code == 200
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as resp:
+                    if resp.status == 200:
+                        logger.info(f"Blynk set {pin} to {value}")
+                        return True
+                    else:
+                        logger.error(f"Blynk set failed for {pin}: {resp.status}")
+                        return False
         except Exception as e:
             logger.error(f"Blynk set error: {e}")
-        return False
-    
+            return False
+
+    async def get_pin_value(self, pin: str) -> str:
+        """Read a virtual pin value via Blynk HTTP API."""
+        url = f"{self.base_url}/get?token={self.token}&pin={pin}"
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        # Blynk returns an array with the current value(s)
+                        return str(data[0]) if data else "0"
+                    else:
+                        logger.error(f"Blynk get failed for {pin}: {resp.status}")
+                        return "0"
+        except Exception as e:
+            logger.error(f"Blynk get error: {e}")
+            return "0"
+
     async def get_load_states(self) -> dict:
-        """Get all load states (Light=V0, Fan=V1, Pump=V2)"""
-        light = await self.get_value("V0")
-        fan = await self.get_value("V1")
-        pump = await self.get_value("V2")
-        
+        """Retrieve current states of all loads from Blynk."""
+        light = await self.get_pin_value("V31")
+        fan = await self.get_pin_value("V32")
+        pump = await self.get_pin_value("V30")
         return {
             "light_on": light == "1",
             "fan_on": fan == "1",
             "pump_on": pump == "1"
         }
 
-# Global instance
+# Singleton instance
 blynk = BlynkService()
