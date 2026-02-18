@@ -90,22 +90,27 @@ async def build_dashboard_data() -> DashboardData:
     now = datetime.now(timezone.utc).isoformat()
     
     if feed:
-        solar_voltage = parse_float(feed.get('field1'))
-        solar_current = parse_float(feed.get('field2'))
-        solar_power = parse_float(feed.get('field3'))
-        battery_soc = parse_float(feed.get('field4'))
-        battery_voltage = parse_float(feed.get('field5'))
-        battery_current = parse_float(feed.get('field6'))
+        # Correct mapping based on Arduino (field1..field8)
+        battery_voltage = parse_float(feed.get('field1'))
+        battery_current = parse_float(feed.get('field2'))
+        battery_soc = parse_float(feed.get('field3'))
+        battery_soh = parse_float(feed.get('field4'))          # Optional
+        solar_voltage = parse_float(feed.get('field5'))
+        solar_current = parse_float(feed.get('field6'))
         load_power = parse_float(feed.get('field7'))
         load_current = parse_float(feed.get('field8'))
         timestamp = feed.get('created_at', now)
     else:
-        solar_voltage = solar_current = solar_power = 0.0
-        battery_soc = battery_voltage = battery_current = 0.0
+        solar_voltage = solar_current = 0.0
+        battery_voltage = battery_current = 0.0
+        battery_soc = 0.0
         load_power = load_current = 0.0
         timestamp = now
     
-    # Calculate energy estimates
+    # Calculate solar power from voltage and current
+    solar_power = solar_voltage * solar_current
+    
+    # Calculate energy estimates (kWh)
     energy_24h = solar_power * 24 / 1000
     energy_7d = energy_24h * 7
     
@@ -122,8 +127,8 @@ async def build_dashboard_data() -> DashboardData:
             voltage=battery_voltage,
             current=battery_current,
             soc=battery_soc,
-            soh=98.5,
-            temperature=27.5,
+            soh=98.5,                     # Could use battery_soh if desired
+            temperature=27.5,              # Not from ThingSpeak (use Blynk or default)
             charging=battery_current > 0,
             timestamp=timestamp
         ),
@@ -206,11 +211,12 @@ async def get_solar_data(payload: dict = Depends(verify_token)):
     history = []
     if feeds:
         for feed in feeds:
+            # Use fields 5 (solar V), 6 (solar I), 7/8 not needed
             history.append({
                 "timestamp": feed.get('created_at'),
-                "voltage": parse_float(feed.get('field1')),
-                "current": parse_float(feed.get('field2')),
-                "power": parse_float(feed.get('field3'))
+                "voltage": parse_float(feed.get('field5')),
+                "current": parse_float(feed.get('field6')),
+                "power": parse_float(feed.get('field5')) * parse_float(feed.get('field6'))
             })
     
     predictions = predictor.get_predictions()
@@ -232,11 +238,12 @@ async def get_battery_data(payload: dict = Depends(verify_token)):
     history = []
     if feeds:
         for feed in feeds:
+            # Fields 1 (V), 2 (I), 3 (SOC)
             history.append({
                 "timestamp": feed.get('created_at'),
-                "voltage": parse_float(feed.get('field5')),
-                "current": parse_float(feed.get('field6')),
-                "soc": parse_float(feed.get('field4'))
+                "voltage": parse_float(feed.get('field1')),
+                "current": parse_float(feed.get('field2')),
+                "soc": parse_float(feed.get('field3'))
             })
     
     return {
@@ -255,13 +262,14 @@ async def get_load_data(payload: dict = Depends(verify_token)):
     history = []
     if feeds:
         for feed in feeds:
+            # Fields 7 (power) and 8 (current)
             history.append({
                 "timestamp": feed.get('created_at'),
                 "power": parse_float(feed.get('field7')),
                 "current": parse_float(feed.get('field8'))
             })
     
-    # Get load states from Blynk
+    # Get load states from Blynk (uses updated pins V30/V31/V32)
     load_states = await blynk.get_load_states()
     load_data = data.load.model_dump()
     load_data.update(load_states)
@@ -293,7 +301,8 @@ async def control_load(control: LoadControl, payload: dict = Depends(verify_toke
             detail="Critical battery level: Only essential loads allowed."
         )
     
-    pin_map = {"light": "V0", "fan": "V1", "pump": "V2"}
+    # Correct pin mapping based on Arduino (V30 = pump, V31 = light, V32 = fan)
+    pin_map = {"light": "V31", "fan": "V32", "pump": "V30"}
     pin = pin_map.get(control.device)
     
     if not pin:
@@ -343,12 +352,12 @@ async def get_historical_data(results: int = 100, payload: dict = Depends(verify
     for feed in feeds:
         processed.append({
             "timestamp": feed.get('created_at'),
-            "solar_voltage": parse_float(feed.get('field1')),
-            "solar_current": parse_float(feed.get('field2')),
-            "solar_power": parse_float(feed.get('field3')),
-            "battery_soc": parse_float(feed.get('field4')),
-            "battery_voltage": parse_float(feed.get('field5')),
-            "battery_current": parse_float(feed.get('field6')),
+            "solar_voltage": parse_float(feed.get('field5')),
+            "solar_current": parse_float(feed.get('field6')),
+            "solar_power": parse_float(feed.get('field5')) * parse_float(feed.get('field6')),
+            "battery_soc": parse_float(feed.get('field3')),
+            "battery_voltage": parse_float(feed.get('field1')),
+            "battery_current": parse_float(feed.get('field2')),
             "load_power": parse_float(feed.get('field7')),
             "load_current": parse_float(feed.get('field8'))
         })
@@ -367,7 +376,7 @@ async def export_csv(payload: dict = Depends(verify_token)):
     csv_data = "timestamp,solar_voltage,solar_current,solar_power,battery_soc,battery_voltage,battery_current,load_power,load_current\n"
     
     for feed in feeds:
-        row = f"{feed.get('created_at','')},{feed.get('field1','')},{feed.get('field2','')},{feed.get('field3','')},{feed.get('field4','')},{feed.get('field5','')},{feed.get('field6','')},{feed.get('field7','')},{feed.get('field8','')}\n"
+        row = f"{feed.get('created_at','')},{feed.get('field5','')},{feed.get('field6','')},{parse_float(feed.get('field5'))*parse_float(feed.get('field6'))},{feed.get('field3','')},{feed.get('field1','')},{feed.get('field2','')},{feed.get('field7','')},{feed.get('field8','')}\n"
         csv_data += row
     
     return {"csv": csv_data, "filename": f"isems_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"}
