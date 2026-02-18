@@ -33,7 +33,7 @@ class ThingSpeakService:
                 if response.status_code == 200:
                     data = response.json()
                     feeds = data.get("feeds", [])
-                    cache.set(cache_key, feeds, ttl=10)  # Cache for 10 seconds
+                    cache.set(cache_key, feeds, ttl=10)
                     logger.info(f"Fetched {len(feeds)} feeds from ThingSpeak")
                     return feeds
                 else:
@@ -47,8 +47,7 @@ class ThingSpeakService:
         """Fetch the single most recent feed entry."""
         feeds = await self.fetch_feeds(results=1)
         if feeds and len(feeds) > 0:
-            # The first element is the newest (reverse chronological)
-            return feeds[0]
+            return feeds[0]  # newest first
         return None
 
     async def check_online(self, max_age_seconds: int = 60) -> bool:
@@ -61,10 +60,10 @@ class ThingSpeakService:
         if not created:
             return False
         try:
-            # Convert ThingSpeak timestamp (e.g., "2025-02-18T12:34:56Z") to datetime
             last_time = datetime.fromisoformat(created.replace("Z", "+00:00"))
             now = datetime.now(timezone.utc)
             delta = (now - last_time).total_seconds()
+            logger.debug(f"Latest feed timestamp: {created}, delta: {delta}s")
             return delta <= max_age_seconds
         except Exception as e:
             logger.error(f"Error parsing timestamp: {e}")
