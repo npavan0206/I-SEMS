@@ -86,16 +86,14 @@ async def build_dashboard_data() -> DashboardData:
         return DashboardData(**cached)
 
     feed = await thingspeak.fetch_latest()
-    # Use online check based on timestamp, not just existence of feed
     device_online = await thingspeak.check_online(max_age_seconds=60)
     now = datetime.now(timezone.utc).isoformat()
 
     if feed:
-        # Correct mapping based on Arduino (field1..field8)
+        # Arduino mapping: field1=battV, field2=battI, field3=soc, field5=solarV, field6=solarI, field7=loadPower, field8=loadCurrent
         battery_voltage = parse_float(feed.get('field1'))
         battery_current = parse_float(feed.get('field2'))
         battery_soc = parse_float(feed.get('field3'))
-        # field4 is battery SOH (optional, not used here)
         solar_voltage = parse_float(feed.get('field5'))
         solar_current = parse_float(feed.get('field6'))
         load_power = parse_float(feed.get('field7'))
@@ -108,10 +106,7 @@ async def build_dashboard_data() -> DashboardData:
         load_power = load_current = 0.0
         timestamp = now
 
-    # Calculate solar power from voltage and current
     solar_power = solar_voltage * solar_current
-
-    # Calculate energy estimates (kWh)
     energy_24h = solar_power * 24 / 1000
     energy_7d = energy_24h * 7
 
@@ -128,8 +123,8 @@ async def build_dashboard_data() -> DashboardData:
             voltage=battery_voltage,
             current=battery_current,
             soc=battery_soc,
-            soh=98.5,                     # Could be read from field4 if desired
-            temperature=27.5,              # Not from ThingSpeak (use Blynk or default)
+            soh=98.5,
+            temperature=27.5,
             charging=battery_current > 0,
             timestamp=timestamp
         ),
@@ -161,12 +156,10 @@ async def register(user_data: UserCreate):
     existing = await db.users.find_one({"email": user_data.email}, {"_id": 0})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
-
     user = User(email=user_data.email, name=user_data.name)
     user_dict = user.model_dump()
     user_dict['password_hash'] = hash_password(user_data.password)
     user_dict['created_at'] = user_dict['created_at'].isoformat()
-
     await db.users.insert_one(user_dict)
     token = create_token(user.id, user.email)
     return TokenResponse(access_token=token, user=user)
@@ -174,12 +167,8 @@ async def register(user_data: UserCreate):
 @api_router.post("/auth/login", response_model=TokenResponse)
 async def login(credentials: UserLogin):
     user_doc = await db.users.find_one({"email": credentials.email}, {"_id": 0})
-    if not user_doc:
+    if not user_doc or not verify_password(credentials.password, user_doc.get('password_hash', '')):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-
-    if not verify_password(credentials.password, user_doc.get('password_hash', '')):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-
     user = User(id=user_doc['id'], email=user_doc['email'], name=user_doc['name'])
     token = create_token(user.id, user.email)
     return TokenResponse(access_token=token, user=user)
@@ -199,7 +188,6 @@ async def get_dashboard(payload: dict = Depends(verify_token)):
 
 @api_router.get("/dashboard/public", response_model=DashboardData)
 async def get_dashboard_public():
-    """Public endpoint for demo purposes"""
     return await build_dashboard_data()
 
 # ==================== SOLAR ROUTES ====================
@@ -208,11 +196,9 @@ async def get_dashboard_public():
 async def get_solar_data(payload: dict = Depends(verify_token)):
     data = await build_dashboard_data()
     feeds = await thingspeak.fetch_feeds(results=100)
-
     history = []
     if feeds:
         for feed in feeds:
-            # Use fields 5 (solar V), 6 (solar I)
             solar_v = parse_float(feed.get('field5'))
             solar_i = parse_float(feed.get('field6'))
             history.append({
@@ -221,10 +207,7 @@ async def get_solar_data(payload: dict = Depends(verify_token)):
                 "current": solar_i,
                 "power": solar_v * solar_i
             })
-
-    # Await the async predictor
     predictions = await predictor.get_predictions()
-
     return {
         "current": data.solar.model_dump(),
         "history": history,
@@ -238,27 +221,21 @@ async def get_solar_data(payload: dict = Depends(verify_token)):
 async def get_battery_data(payload: dict = Depends(verify_token)):
     data = await build_dashboard_data()
     feeds = await thingspeak.fetch_feeds(results=100)
-
     history = []
     if feeds:
         for feed in feeds:
-            # Fields 1 (V), 2 (I), 3 (SOC)
             history.append({
                 "timestamp": feed.get('created_at'),
                 "voltage": parse_float(feed.get('field1')),
                 "current": parse_float(feed.get('field2')),
                 "soc": parse_float(feed.get('field3'))
             })
-
-    # Optionally add battery status from predictions
     predictions = await predictor.get_predictions()
-    status_text = predictions.get("battery_status", "")
-
     return {
         "current": data.battery.model_dump(),
         "history": history,
         "device_online": data.device_online,
-        "status_text": status_text  # Add this field for frontend
+        "status_text": predictions.get("battery_status", "")
     }
 
 # ==================== LOAD ROUTES ====================
@@ -267,25 +244,18 @@ async def get_battery_data(payload: dict = Depends(verify_token)):
 async def get_load_data(payload: dict = Depends(verify_token)):
     data = await build_dashboard_data()
     feeds = await thingspeak.fetch_feeds(results=100)
-
     history = []
     if feeds:
         for feed in feeds:
-            # Fields 7 (power) and 8 (current)
             history.append({
                 "timestamp": feed.get('created_at'),
                 "power": parse_float(feed.get('field7')),
                 "current": parse_float(feed.get('field8'))
             })
-
-    # Get load states from Blynk (uses updated pins V30/V31/V32)
     load_states = await blynk.get_load_states()
     load_data = data.load.model_dump()
     load_data.update(load_states)
-
-    # Await predictor for load demand
     predictions = await predictor.get_predictions()
-
     return {
         "current": load_data,
         "history": history,
@@ -296,30 +266,17 @@ async def get_load_data(payload: dict = Depends(verify_token)):
 @api_router.post("/load/control")
 async def control_load(control: LoadControl, payload: dict = Depends(verify_token)):
     data = await build_dashboard_data()
-
     # SOC safety checks
-    if control.device == "pump" and control.state:
-        if data.battery.soc < 20:
-            raise HTTPException(
-                status_code=400,
-                detail="Cannot enable pump: Battery SOC below 20%. Pump locked for safety."
-            )
-
+    if control.device == "pump" and control.state and data.battery.soc < 20:
+        raise HTTPException(status_code=400, detail="Cannot enable pump: Battery SOC below 20%. Pump locked.")
     if control.device == "light" and control.state and data.battery.soc < 10:
-        raise HTTPException(
-            status_code=400,
-            detail="Critical battery level: Only essential loads allowed."
-        )
-
-    # Correct pin mapping based on Arduino (V30 = pump, V31 = light, V32 = fan)
-    pin_map = {"light": "V31", "fan": "V32", "pump": "V30"}
+        raise HTTPException(status_code=400, detail="Critical battery level: Only essential loads allowed.")
+    # Correct pin mapping: light V30, fan V31, pump V32
+    pin_map = {"light": "V30", "fan": "V31", "pump": "V32"}
     pin = pin_map.get(control.device)
-
     if not pin:
         raise HTTPException(status_code=400, detail="Invalid device")
-
     success = await blynk.set_value(pin, "1" if control.state else "0")
-
     return {
         "success": success,
         "device": control.device,
@@ -338,8 +295,7 @@ async def get_grid_data(payload: dict = Depends(verify_token)):
 async def set_grid_mode(mode: str, payload: dict = Depends(verify_token)):
     valid_modes = ["solar", "battery", "hybrid"]
     if mode not in valid_modes:
-        raise HTTPException(status_code=400, detail=f"Invalid mode. Choose from: {valid_modes}")
-
+        raise HTTPException(status_code=400, detail="Invalid mode")
     cache.set("grid_mode", mode, ttl=3600)
     return {"success": True, "mode": mode}
 
@@ -347,18 +303,15 @@ async def set_grid_mode(mode: str, payload: dict = Depends(verify_token)):
 
 @api_router.get("/predictions")
 async def get_ai_predictions(payload: dict = Depends(verify_token)):
-    predictions = await predictor.get_predictions()
-    return predictions
+    return await predictor.get_predictions()
 
 # ==================== HISTORY ROUTES ====================
 
 @api_router.get("/history")
 async def get_historical_data(results: int = 100, payload: dict = Depends(verify_token)):
     feeds = await thingspeak.fetch_feeds(results=results)
-
     if not feeds:
         return {"data": [], "device_online": False}
-
     processed = []
     for feed in feeds:
         solar_v = parse_float(feed.get('field5'))
@@ -374,7 +327,6 @@ async def get_historical_data(results: int = 100, payload: dict = Depends(verify
             "load_power": parse_float(feed.get('field7')),
             "load_current": parse_float(feed.get('field8'))
         })
-
     return {"data": processed, "device_online": True}
 
 # ==================== CSV EXPORT ====================
@@ -382,19 +334,15 @@ async def get_historical_data(results: int = 100, payload: dict = Depends(verify
 @api_router.get("/export/csv")
 async def export_csv(payload: dict = Depends(verify_token)):
     feeds = await thingspeak.fetch_feeds(results=500)
-
     if not feeds:
-        raise HTTPException(status_code=404, detail="No data available for export")
-
+        raise HTTPException(status_code=404, detail="No data")
     csv_data = "timestamp,solar_voltage,solar_current,solar_power,battery_soc,battery_voltage,battery_current,load_power,load_current\n"
-
     for feed in feeds:
         solar_v = parse_float(feed.get('field5', '0'))
         solar_i = parse_float(feed.get('field6', '0'))
         solar_p = solar_v * solar_i
         row = f"{feed.get('created_at','')},{solar_v},{solar_i},{solar_p},{feed.get('field3','')},{feed.get('field1','')},{feed.get('field2','')},{feed.get('field7','')},{feed.get('field8','')}\n"
         csv_data += row
-
     return {"csv": csv_data, "filename": f"isems_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"}
 
 # ==================== HEALTH CHECK ====================
@@ -417,7 +365,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str = None):
         except:
             await websocket.close(code=4001)
             return
-
     await manager.connect(websocket)
     try:
         while True:
@@ -432,7 +379,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str = None):
 
 # Include router and add middleware
 app.include_router(api_router)
-
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -445,7 +391,6 @@ app.add_middleware(
 async def shutdown_db_client():
     client.close()
 
-# For Railway deployment
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=PORT, reload=False)
