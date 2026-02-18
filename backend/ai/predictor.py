@@ -20,24 +20,19 @@ class AIPredictor:
 
         # Extract solar power values (field5 * field6)
         solar_powers = []
-        timestamps = []
         for feed in feeds:
             try:
                 v = parse_float(feed.get('field5'))
                 i = parse_float(feed.get('field6'))
                 power = v * i
                 solar_powers.append(power)
-                # Parse timestamp for potential time-based weighting
-                ts = datetime.fromisoformat(feed['created_at'].replace('Z', '+00:00'))
-                timestamps.append(ts)
-            except Exception as e:
-                logger.debug(f"Skipping feed: {e}")
+            except:
                 continue
 
         if len(solar_powers) < 10:
             return self._fallback_predictions()
 
-        # Simple linear regression on last 10 points to forecast
+        # Simple linear regression on last 10 points
         recent = solar_powers[-10:]
         x = np.arange(len(recent))
         slope, intercept = np.polyfit(x, recent, 1)
@@ -69,18 +64,15 @@ class AIPredictor:
             "linear_regression": {
                 "solar_power_1h": max(0, round(next_hour, 1)),
                 "solar_power_2h": max(0, round(next_2_hour, 1)),
-                "load_demand_1h": 0.0  # You can add load prediction later
+                "load_demand_1h": 0.0  # placeholder
             },
             "time_weighted": round(time_weighted, 1),
-            # Confidence removed as requested – you can optionally omit this field entirely
-            # or keep a hidden one for internal use. We'll keep it as 0 to avoid frontend display.
-            "confidence": 0,
+            "confidence": 0,  # removed from UI
             "battery_status": status,
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
     def _fallback_predictions(self):
-        """Return zero predictions when insufficient data"""
         return {
             "linear_regression": {
                 "solar_power_1h": 0.0,
