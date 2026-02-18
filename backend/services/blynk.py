@@ -45,6 +45,7 @@ class BlynkService:
 
     async def get_load_states(self) -> dict:
         """Retrieve current states of all loads from Blynk."""
+        # Using correct pins: V30 = pump, V31 = light, V32 = fan
         light = await self.get_pin_value("V31")
         fan = await self.get_pin_value("V32")
         pump = await self.get_pin_value("V30")
