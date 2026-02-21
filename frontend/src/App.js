@@ -55,7 +55,7 @@ const AuthProvider = ({ children }) => {
     const validateToken = async () => {
       if (token) {
         try {
-          const API_URL = process.env.REACT_APP_BACKEND_URL;
+          const API_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
           const response = await fetch(`${API_URL}/api/auth/me`, {
             headers: { Authorization: `Bearer ${token}` }
           });
