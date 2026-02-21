@@ -74,6 +74,8 @@ export default function LoadPage() {
 
   const current = loadData?.current || {};
   const deviceOnline = loadData?.device_online ?? false;
+  // battery_soc is now provided by backend (added to /load endpoint)
+  const batterySoc = loadData?.battery_soc ?? 100;
 
   const loads = [
     {
@@ -104,7 +106,7 @@ export default function LoadPage() {
       tier: 'non-essential',
       tierLabel: 'Non-Essential',
       description: 'Water pumping system',
-      locked: (current.soc || 100) < 20
+      locked: batterySoc < 20
     }
   ];
 
@@ -210,7 +212,6 @@ export default function LoadPage() {
                       onCheckedChange={() => handleToggle(load.id, load.isOn)}
                       disabled={controlling[load.id] || !deviceOnline}
                       data-testid={`toggle-${load.id}`}
-                      className={load.isOn ? 'bg-green-500' : 'bg-red-500'} // Green when on, red when off
                     />
                   )}
                 </div>
