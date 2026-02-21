@@ -3,7 +3,7 @@ import { Navbar } from '@/components/dashboard/Navbar';
 import { api } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Plug, Lightbulb, Fan, Droplets, RefreshCw, AlertTriangle, Lock, Brain } from 'lucide-react';
+import { Plug, Lightbulb, Fan, Droplets, RefreshCw, AlertTriangle, Lock, Brain, Activity, Zap } from 'lucide-react';
 import {
   LineChart,
   Line,
@@ -32,6 +32,7 @@ export default function LoadPage() {
       setPredictions(predResponse);
     } catch (error) {
       console.error('Failed to fetch load data:', error);
+      toast.error('Could not fetch load data');
     } finally {
       setLoading(false);
     }
@@ -46,8 +47,9 @@ export default function LoadPage() {
   const handleToggle = async (device, currentState) => {
     setControlling(prev => ({ ...prev, [device]: true }));
     try {
-      await api.controlLoad(device, !currentState);
-      toast.success(`${device.charAt(0).toUpperCase() + device.slice(1)} ${!currentState ? 'enabled' : 'disabled'}`);
+      const result = await api.controlLoad(device, !currentState);
+      toast.success(`${device} ${!currentState ? 'enabled' : 'disabled'}`);
+      // Immediately refetch to get updated states from backend
       await fetchData();
     } catch (error) {
       toast.error(error.message || `Failed to control ${device}`);
@@ -74,39 +76,51 @@ export default function LoadPage() {
 
   const current = loadData?.current || {};
   const deviceOnline = loadData?.device_online ?? false;
-  // battery_soc is now provided by backend (added to /load endpoint)
+  // battery_soc is now provided by the backend (added to /load endpoint)
   const batterySoc = loadData?.battery_soc ?? 100;
 
+  // Define each load with its details – assumes backend returns:
+  // light_on, fan_on, pump_on, and optionally light_voltage, light_current, light_power, etc.
   const loads = [
     {
       id: 'light',
       name: 'Light',
       icon: Lightbulb,
-      isOn: current.light_on,
+      isOn: current.light_on || false,
       tier: 'essential',
       tierLabel: 'Essential',
       description: 'Indoor lighting system',
-      locked: false
+      locked: false,
+      // Per-load details (optional – if missing, show '—')
+      voltage: current.light_voltage,
+      current: current.light_current,
+      power: current.light_power
     },
     {
       id: 'fan',
       name: 'Fan',
       icon: Fan,
-      isOn: current.fan_on,
+      isOn: current.fan_on || false,
       tier: 'semi-essential',
       tierLabel: 'Semi-Essential',
       description: 'Ventilation system',
-      locked: false
+      locked: false,
+      voltage: current.fan_voltage,
+      current: current.fan_current,
+      power: current.fan_power
     },
     {
       id: 'pump',
       name: 'Pump',
       icon: Droplets,
-      isOn: current.pump_on,
+      isOn: current.pump_on || false,
       tier: 'non-essential',
       tierLabel: 'Non-Essential',
       description: 'Water pumping system',
-      locked: batterySoc < 20
+      locked: batterySoc < 20,
+      voltage: current.pump_voltage,
+      current: current.pump_current,
+      power: current.pump_power
     }
   ];
 
@@ -139,7 +153,7 @@ export default function LoadPage() {
           <div className="mb-6 p-4 rounded-xl bg-load/10 border border-load/20">
             <p className="text-load font-medium flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-load animate-pulse" />
-              Device Offline - Controls may not respond
+              Device Offline – Controls disabled, showing last known values
             </p>
           </div>
         )}
@@ -157,7 +171,8 @@ export default function LoadPage() {
 
           <div className="glass-card rounded-xl p-5">
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-xs text-muted-foreground font-rajdhani uppercase tracking-wider">Current</span>
+              <Activity className="w-4 h-4 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground font-rajdhani uppercase tracking-wider">Total Current</span>
             </div>
             <p className="font-mono font-bold text-3xl">{(current.current || 0).toFixed(2)}</p>
             <p className="text-xs text-muted-foreground">Amps</p>
@@ -166,7 +181,7 @@ export default function LoadPage() {
           <div className="glass-card rounded-xl p-5 col-span-2 md:col-span-1">
             <div className="flex items-center gap-2 mb-2">
               <Brain className="w-4 h-4 text-primary" />
-              <span className="text-xs text-muted-foreground font-rajdhani uppercase tracking-wider">Predicted (1h)</span>
+              <span className="text-xs text-muted-foreground font-rajdhani uppercase tracking-wider">Predicted Load (1h)</span>
             </div>
             <p className="font-mono font-bold text-3xl text-primary">
               {(predictions?.linear_regression?.load_demand_1h || 0).toFixed(1)}
@@ -175,10 +190,11 @@ export default function LoadPage() {
           </div>
         </div>
 
-        {/* Load Controls */}
+        {/* Load Controls with Per‑Load Details */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {loads.map(load => {
             const Icon = load.icon;
+            const isControlling = controlling[load.id];
             return (
               <div
                 key={load.id}
@@ -210,7 +226,7 @@ export default function LoadPage() {
                     <Switch
                       checked={load.isOn}
                       onCheckedChange={() => handleToggle(load.id, load.isOn)}
-                      disabled={controlling[load.id] || !deviceOnline}
+                      disabled={isControlling || !deviceOnline}
                       data-testid={`toggle-${load.id}`}
                     />
                   )}
@@ -218,11 +234,36 @@ export default function LoadPage() {
 
                 <p className="text-sm text-muted-foreground mb-4">{load.description}</p>
 
+                {/* Per‑Load Metrics */}
+                <div className="grid grid-cols-3 gap-2 mb-4 text-center text-xs">
+                  <div className="p-2 rounded-md bg-white/5">
+                    <Zap className="w-3 h-3 mx-auto mb-1 text-load" />
+                    <span className="block font-mono font-bold">
+                      {load.voltage !== undefined ? load.voltage.toFixed(1) : '—'}
+                    </span>
+                    <span className="text-muted-foreground">V</span>
+                  </div>
+                  <div className="p-2 rounded-md bg-white/5">
+                    <Activity className="w-3 h-3 mx-auto mb-1 text-load" />
+                    <span className="block font-mono font-bold">
+                      {load.current !== undefined ? load.current.toFixed(2) : '—'}
+                    </span>
+                    <span className="text-muted-foreground">A</span>
+                  </div>
+                  <div className="p-2 rounded-md bg-white/5">
+                    <Plug className="w-3 h-3 mx-auto mb-1 text-load" />
+                    <span className="block font-mono font-bold">
+                      {load.power !== undefined ? load.power.toFixed(1) : '—'}
+                    </span>
+                    <span className="text-muted-foreground">W</span>
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-between">
                   <span className={`text-sm font-medium ${load.isOn ? 'text-load' : 'text-muted-foreground'}`}>
                     {load.isOn ? 'Active' : 'Inactive'}
                   </span>
-                  {controlling[load.id] && (
+                  {isControlling && (
                     <span className="text-xs text-muted-foreground animate-pulse">Updating...</span>
                   )}
                 </div>
