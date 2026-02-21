@@ -187,7 +187,7 @@ export default function SolarPage() {
               <div>
                 <h3 className="font-rajdhani font-semibold text-lg">AI Forecast</h3>
                 <p className="text-xs text-muted-foreground">
-                  {((predictions.confidence || 0) * 100).toFixed(0)}% confidence
+                  Confidence: {predictions.confidence}%
                 </p>
               </div>
             </div>
@@ -216,13 +216,12 @@ export default function SolarPage() {
               </div>
 
               <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs text-muted-foreground font-rajdhani uppercase">Time-Weighted Prediction</span>
-                </div>
-                <p className="font-mono font-bold text-xl">
-                  {(predictions.time_weighted?.solar_power_1h || 0).toFixed(1)} W
-                </p>
-                <p className="text-xs text-muted-foreground">Based on historical patterns</p>
+                <span className="text-xs text-muted-foreground font-rajdhani uppercase">EWMA Prediction</span>
+                <p className="font-mono font-bold text-2xl">{(predictions.ewma || 0).toFixed(1)} W</p>
+              </div>
+              <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                <span className="text-xs text-muted-foreground font-rajdhani uppercase">Time-Weighted Average</span>
+                <p className="font-mono font-bold text-2xl">{(predictions.time_weighted || 0).toFixed(1)} W</p>
               </div>
             </div>
           </div>
