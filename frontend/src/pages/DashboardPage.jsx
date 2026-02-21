@@ -35,11 +35,14 @@ export default function DashboardPage() {
     }
   }, []);
 
+  // Poll only when WebSocket is not connected
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 30000); // Refresh every 30s
-    return () => clearInterval(interval);
-  }, [fetchData]);
+    if (!connected) {
+      fetchData();
+      const interval = setInterval(fetchData, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [connected, fetchData]);
 
   // Update from WebSocket
   useEffect(() => {
@@ -65,7 +68,6 @@ export default function DashboardPage() {
   };
 
   const data = dashboardData || {};
-  // Device is online if we have data from API - websocket connection status is secondary
   const deviceOnline = data.device_online !== undefined ? data.device_online : false;
 
   if (loading) {
@@ -202,71 +204,36 @@ export default function DashboardPage() {
               <div>
                 <h3 className="font-rajdhani font-semibold text-lg">AI Predictions</h3>
                 <p className="text-xs text-muted-foreground">
-                  Confidence: {(predictions.confidence * 100).toFixed(0)}%
+                  Confidence: {predictions.confidence}%
                 </p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {/* Linear Regression */}
-              <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                <h4 className="font-rajdhani font-medium text-sm uppercase tracking-wider text-muted-foreground mb-4">
-                  Linear Regression Model
-                </h4>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Solar Power (1h)</span>
-                    <div className="flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4 text-solar" />
-                      <span className="font-mono font-bold">
-                        {predictions.linear_regression?.solar_power_1h?.toFixed(1) || 0} W
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Solar Power (2h)</span>
-                    <span className="font-mono font-bold">
-                      {predictions.linear_regression?.solar_power_2h?.toFixed(1) || 0} W
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Load Demand (1h)</span>
-                    <span className="font-mono font-bold">
-                      {predictions.linear_regression?.load_demand_1h?.toFixed(1) || 0} W
-                    </span>
-                  </div>
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-4 rounded-xl bg-solar/10 border border-solar/20">
+                <h4 className="text-xs text-muted-foreground mb-2">1h Solar Power</h4>
+                <p className="font-mono font-bold text-2xl text-solar">
+                  {predictions.linear_regression?.solar_power_1h?.toFixed(1)} W
+                </p>
+                <p className="text-xs text-muted-foreground">Linear Regression</p>
               </div>
-
-              {/* Time-Weighted */}
-              <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                <h4 className="font-rajdhani font-medium text-sm uppercase tracking-wider text-muted-foreground mb-4">
-                  Time-Weighted Model
-                </h4>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Solar Power (1h)</span>
-                    <div className="flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4 text-solar" />
-                      <span className="font-mono font-bold">
-                        {predictions.time_weighted?.solar_power_1h?.toFixed(1) || 0} W
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Solar Power (2h)</span>
-                    <span className="font-mono font-bold">
-                      {predictions.time_weighted?.solar_power_2h?.toFixed(1) || 0} W
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Load Demand (1h)</span>
-                    <span className="font-mono font-bold">
-                      {predictions.time_weighted?.load_demand_1h?.toFixed(1) || 0} W
-                    </span>
-                  </div>
-                </div>
+              <div className="p-4 rounded-xl bg-primary/10 border border-primary/20">
+                <h4 className="text-xs text-muted-foreground mb-2">EWMA</h4>
+                <p className="font-mono font-bold text-2xl text-primary">
+                  {predictions.ewma?.toFixed(1)} W
+                </p>
+                <p className="text-xs text-muted-foreground">Exponential Weighted</p>
               </div>
+              <div className="p-4 rounded-xl bg-battery/10 border border-battery/20">
+                <h4 className="text-xs text-muted-foreground mb-2">Time-Weighted</h4>
+                <p className="font-mono font-bold text-2xl text-battery">
+                  {predictions.time_weighted?.toFixed(1)} W
+                </p>
+                <p className="text-xs text-muted-foreground">Recent bias</p>
+              </div>
+            </div>
+            <div className="mt-4 p-3 rounded-lg bg-white/5">
+              <p className="text-sm">{predictions.battery_status}</p>
             </div>
           </div>
         )}
