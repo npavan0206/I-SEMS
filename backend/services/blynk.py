@@ -2,6 +2,7 @@
 import aiohttp
 import logging
 from core.config import BLYNK_AUTH_TOKEN, BLYNK_BASE_URL
+from utils.helpers import parse_float
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,41 @@ class BlynkService:
             "light_on": light == "1",
             "fan_on": fan == "1",
             "pump_on": pump == "1"
+        }
+
+    async def get_load_metrics(self) -> dict:
+        """
+        Retrieve per‑load voltage, current, and power from Blynk.
+        Pin mapping (adjust these to match your actual Blynk project):
+          - Light:  voltage V33, current V34, power V35
+          - Fan:    voltage V36, current V37, power V38
+          - Pump:   voltage V39, current V40, power V41
+        """
+        # Light metrics
+        light_voltage = parse_float(await self.get_pin_value("V33"))
+        light_current = parse_float(await self.get_pin_value("V34"))
+        light_power   = parse_float(await self.get_pin_value("V35"))
+
+        # Fan metrics
+        fan_voltage   = parse_float(await self.get_pin_value("V36"))
+        fan_current   = parse_float(await self.get_pin_value("V37"))
+        fan_power     = parse_float(await self.get_pin_value("V38"))
+
+        # Pump metrics
+        pump_voltage  = parse_float(await self.get_pin_value("V39"))
+        pump_current  = parse_float(await self.get_pin_value("V40"))
+        pump_power    = parse_float(await self.get_pin_value("V41"))
+
+        return {
+            "light_voltage": light_voltage,
+            "light_current": light_current,
+            "light_power": light_power,
+            "fan_voltage": fan_voltage,
+            "fan_current": fan_current,
+            "fan_power": fan_power,
+            "pump_voltage": pump_voltage,
+            "pump_current": pump_current,
+            "pump_power": pump_power,
         }
 
 # Singleton instance
