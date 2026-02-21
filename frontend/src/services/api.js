@@ -19,6 +19,20 @@ const getAuthHeaders = () => {
   };
 };
 
+const handleResponse = async (response) => {
+  if (!response.ok) {
+    let errorDetail = 'Request failed';
+    try {
+      const errorData = await response.json();
+      errorDetail = errorData.detail || errorData.message || errorDetail;
+    } catch {
+      errorDetail = response.statusText || errorDetail;
+    }
+    throw new Error(errorDetail);
+  }
+  return response.json();
+};
+
 export const api = {
   // Auth
   login: async (email, password) => {
@@ -27,8 +41,7 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
     });
-    if (!response.ok) throw new Error('Invalid credentials');
-    return response.json();
+    return handleResponse(response);
   },
 
   register: async (email, password, name) => {
@@ -37,11 +50,7 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, name })
     });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Registration failed');
-    }
-    return response.json();
+    return handleResponse(response);
   },
 
   // Dashboard
@@ -49,14 +58,12 @@ export const api = {
     const response = await fetch(`${API_URL}/api/dashboard`, {
       headers: getAuthHeaders()
     });
-    if (!response.ok) throw new Error('Failed to fetch dashboard');
-    return response.json();
+    return handleResponse(response);
   },
 
   getDashboardPublic: async () => {
     const response = await fetch(`${API_URL}/api/dashboard/public`);
-    if (!response.ok) throw new Error('Failed to fetch dashboard');
-    return response.json();
+    return handleResponse(response);
   },
 
   // Solar
@@ -64,8 +71,7 @@ export const api = {
     const response = await fetch(`${API_URL}/api/solar`, {
       headers: getAuthHeaders()
     });
-    if (!response.ok) throw new Error('Failed to fetch solar data');
-    return response.json();
+    return handleResponse(response);
   },
 
   // Battery
@@ -73,8 +79,7 @@ export const api = {
     const response = await fetch(`${API_URL}/api/battery`, {
       headers: getAuthHeaders()
     });
-    if (!response.ok) throw new Error('Failed to fetch battery data');
-    return response.json();
+    return handleResponse(response);
   },
 
   // Load
@@ -82,8 +87,9 @@ export const api = {
     const response = await fetch(`${API_URL}/api/load`, {
       headers: getAuthHeaders()
     });
-    if (!response.ok) throw new Error('Failed to fetch load data');
-    return response.json();
+    const data = await handleResponse(response);
+    // Ensure battery_soc is present (backend already adds it)
+    return data;
   },
 
   controlLoad: async (device, state) => {
@@ -92,11 +98,7 @@ export const api = {
       headers: getAuthHeaders(),
       body: JSON.stringify({ device, state })
     });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to control load');
-    }
-    return response.json();
+    return handleResponse(response);
   },
 
   // Grid
@@ -104,8 +106,7 @@ export const api = {
     const response = await fetch(`${API_URL}/api/grid`, {
       headers: getAuthHeaders()
     });
-    if (!response.ok) throw new Error('Failed to fetch grid data');
-    return response.json();
+    return handleResponse(response);
   },
 
   setGridMode: async (mode) => {
@@ -113,8 +114,7 @@ export const api = {
       method: 'POST',
       headers: getAuthHeaders()
     });
-    if (!response.ok) throw new Error('Failed to set grid mode');
-    return response.json();
+    return handleResponse(response);
   },
 
   // Predictions
@@ -122,8 +122,7 @@ export const api = {
     const response = await fetch(`${API_URL}/api/predictions`, {
       headers: getAuthHeaders()
     });
-    if (!response.ok) throw new Error('Failed to fetch predictions');
-    return response.json();
+    return handleResponse(response);
   },
 
   // History
@@ -131,8 +130,7 @@ export const api = {
     const response = await fetch(`${API_URL}/api/history?results=${results}`, {
       headers: getAuthHeaders()
     });
-    if (!response.ok) throw new Error('Failed to fetch history');
-    return response.json();
+    return handleResponse(response);
   },
 
   // Export
@@ -140,8 +138,7 @@ export const api = {
     const response = await fetch(`${API_URL}/api/export/csv`, {
       headers: getAuthHeaders()
     });
-    if (!response.ok) throw new Error('Failed to export CSV');
-    return response.json();
+    return handleResponse(response);
   }
 };
 
