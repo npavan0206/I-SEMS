@@ -9,9 +9,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, WebSocket, WebSocketDisconnect
+from fastapi.responses import Response
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List
 import asyncio
 import logging
@@ -19,7 +20,8 @@ import jwt
 
 # Internal imports
 from core.config import (
-    MONGO_URL, DB_NAME, CORS_ORIGINS, JWT_SECRET, JWT_ALGORITHM, PORT
+    MONGO_URL, DB_NAME, CORS_ORIGINS, JWT_SECRET, JWT_ALGORITHM, PORT,
+    CACHE_TTL_SECONDS
 )
 from services.cache import cache
 from services.thingspeak import thingspeak
@@ -76,21 +78,65 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# ==================== DATA PROCESSING ====================
+# ==================== HELPER FUNCTIONS ====================
+
+async def calculate_energy_24h() -> float:
+    """Calculate actual energy produced in the last 24 hours (kWh) by integrating power over time."""
+    try:
+        feeds = await thingspeak.fetch_feeds(results=288)  # 24h * 12 per hour (5-min intervals)
+    except Exception as e:
+        logger.error(f"Failed to fetch feeds for energy calculation: {e}")
+        return 0.0
+
+    if not feeds or len(feeds) < 2:
+        return 0.0
+
+    total_energy_wh = 0.0
+    for i in range(1, len(feeds)):
+        prev = feeds[i-1]
+        curr = feeds[i]
+
+        # Parse timestamps (ThingSpeak returns ISO strings with 'Z')
+        try:
+            t_prev = datetime.fromisoformat(prev['created_at'].replace('Z', '+00:00'))
+            t_curr = datetime.fromisoformat(curr['created_at'].replace('Z', '+00:00'))
+        except (KeyError, ValueError) as e:
+            logger.debug(f"Timestamp parsing error: {e}")
+            continue
+
+        delta_hours = (t_curr - t_prev).total_seconds() / 3600.0
+        if delta_hours <= 0:
+            continue
+
+        # Average power between two points (field5 * field6)
+        power_prev = parse_float(prev.get('field5')) * parse_float(prev.get('field6'))
+        power_curr = parse_float(curr.get('field5')) * parse_float(curr.get('field6'))
+        avg_power_w = (power_prev + power_curr) / 2.0
+
+        # Energy in Wh = avg power (W) * delta_hours (h)
+        total_energy_wh += avg_power_w * delta_hours
+
+    return round(total_energy_wh / 1000.0, 2)  # convert to kWh
 
 async def build_dashboard_data() -> DashboardData:
-    """Build dashboard data from ThingSpeak"""
+    """Build dashboard data from ThingSpeak with caching."""
     cache_key = "dashboard_data"
     cached = cache.get(cache_key)
     if cached:
         return DashboardData(**cached)
 
-    feed = await thingspeak.fetch_latest()
-    device_online = await thingspeak.check_online(max_age_seconds=60)
+    # Fetch latest data with error handling
+    try:
+        feed = await thingspeak.fetch_latest()
+        device_online = await thingspeak.check_online(max_age_seconds=60)
+    except Exception as e:
+        logger.error(f"ThingSpeak fetch failed in build_dashboard_data: {e}")
+        feed = None
+        device_online = False
+
     now = datetime.now(timezone.utc).isoformat()
 
     if feed:
-        # Arduino mapping: field1=battV, field2=battI, field3=soc, field5=solarV, field6=solarI, field7=loadPower, field8=loadCurrent
         battery_voltage = parse_float(feed.get('field1'))
         battery_current = parse_float(feed.get('field2'))
         battery_soc = parse_float(feed.get('field3'))
@@ -107,16 +153,19 @@ async def build_dashboard_data() -> DashboardData:
         timestamp = now
 
     solar_power = solar_voltage * solar_current
-    energy_24h = solar_power * 24 / 1000
-    energy_7d = energy_24h * 7
+
+    # Accurate energy calculations
+    energy_24h = await calculate_energy_24h()
+    # Rough 7-day estimate (could be improved with 7 days of data)
+    energy_7d = round(energy_24h * 7, 2) if energy_24h > 0 else 0.0
 
     data = DashboardData(
         solar=SolarData(
             voltage=solar_voltage,
             current=solar_current,
             power=solar_power,
-            energy_24h=round(energy_24h, 2),
-            energy_7d=round(energy_7d, 2),
+            energy_24h=energy_24h,
+            energy_7d=energy_7d,
             timestamp=timestamp
         ),
         battery=BatteryData(
@@ -146,7 +195,7 @@ async def build_dashboard_data() -> DashboardData:
         last_update=now
     )
 
-    cache.set(cache_key, data.model_dump())
+    cache.set(cache_key, data.model_dump(), ttl=CACHE_TTL_SECONDS)
     return data
 
 # ==================== AUTH ROUTES ====================
@@ -159,7 +208,7 @@ async def register(user_data: UserCreate):
     user = User(email=user_data.email, name=user_data.name)
     user_dict = user.model_dump()
     user_dict['password_hash'] = hash_password(user_data.password)
-    user_dict['created_at'] = user_dict['created_at'].isoformat()
+    # created_at is already a datetime object – store natively
     await db.users.insert_one(user_dict)
     token = create_token(user.id, user.email)
     return TokenResponse(access_token=token, user=user)
@@ -195,7 +244,12 @@ async def get_dashboard_public():
 @api_router.get("/solar")
 async def get_solar_data(payload: dict = Depends(verify_token)):
     data = await build_dashboard_data()
-    feeds = await thingspeak.fetch_feeds(results=100)
+    try:
+        feeds = await thingspeak.fetch_feeds(results=100)
+    except Exception as e:
+        logger.error(f"Failed to fetch solar history: {e}")
+        feeds = []
+
     history = []
     if feeds:
         for feed in feeds:
@@ -207,7 +261,8 @@ async def get_solar_data(payload: dict = Depends(verify_token)):
                 "current": solar_i,
                 "power": solar_v * solar_i
             })
-    predictions = await predictor.get_predictions()
+
+    predictions = await predictor.get_predictions()  # cached internally
     return {
         "current": data.solar.model_dump(),
         "history": history,
@@ -220,7 +275,12 @@ async def get_solar_data(payload: dict = Depends(verify_token)):
 @api_router.get("/battery")
 async def get_battery_data(payload: dict = Depends(verify_token)):
     data = await build_dashboard_data()
-    feeds = await thingspeak.fetch_feeds(results=100)
+    try:
+        feeds = await thingspeak.fetch_feeds(results=100)
+    except Exception as e:
+        logger.error(f"Failed to fetch battery history: {e}")
+        feeds = []
+
     history = []
     if feeds:
         for feed in feeds:
@@ -230,6 +290,7 @@ async def get_battery_data(payload: dict = Depends(verify_token)):
                 "current": parse_float(feed.get('field2')),
                 "soc": parse_float(feed.get('field3'))
             })
+
     predictions = await predictor.get_predictions()
     return {
         "current": data.battery.model_dump(),
@@ -243,7 +304,12 @@ async def get_battery_data(payload: dict = Depends(verify_token)):
 @api_router.get("/load")
 async def get_load_data(payload: dict = Depends(verify_token)):
     data = await build_dashboard_data()
-    feeds = await thingspeak.fetch_feeds(results=100)
+    try:
+        feeds = await thingspeak.fetch_feeds(results=100)
+    except Exception as e:
+        logger.error(f"Failed to fetch load history: {e}")
+        feeds = []
+
     history = []
     if feeds:
         for feed in feeds:
@@ -252,9 +318,11 @@ async def get_load_data(payload: dict = Depends(verify_token)):
                 "power": parse_float(feed.get('field7')),
                 "current": parse_float(feed.get('field8'))
             })
+
     load_states = await blynk.get_load_states()
     load_data = data.load.model_dump()
     load_data.update(load_states)
+
     predictions = await predictor.get_predictions()
     return {
         "current": load_data,
@@ -309,9 +377,15 @@ async def get_ai_predictions(payload: dict = Depends(verify_token)):
 
 @api_router.get("/history")
 async def get_historical_data(results: int = 100, payload: dict = Depends(verify_token)):
-    feeds = await thingspeak.fetch_feeds(results=results)
+    try:
+        feeds = await thingspeak.fetch_feeds(results=results)
+    except Exception as e:
+        logger.error(f"Failed to fetch history: {e}")
+        raise HTTPException(status_code=503, detail="Historical data temporarily unavailable")
+
     if not feeds:
         return {"data": [], "device_online": False}
+
     processed = []
     for feed in feeds:
         solar_v = parse_float(feed.get('field5'))
@@ -333,9 +407,15 @@ async def get_historical_data(results: int = 100, payload: dict = Depends(verify
 
 @api_router.get("/export/csv")
 async def export_csv(payload: dict = Depends(verify_token)):
-    feeds = await thingspeak.fetch_feeds(results=500)
+    try:
+        feeds = await thingspeak.fetch_feeds(results=500)
+    except Exception as e:
+        logger.error(f"Failed to fetch data for CSV export: {e}")
+        raise HTTPException(status_code=503, detail="Data source unavailable")
+
     if not feeds:
-        raise HTTPException(status_code=404, detail="No data")
+        raise HTTPException(status_code=404, detail="No data available for export")
+
     csv_data = "timestamp,solar_voltage,solar_current,solar_power,battery_soc,battery_voltage,battery_current,load_power,load_current\n"
     for feed in feeds:
         solar_v = parse_float(feed.get('field5', '0'))
@@ -343,13 +423,29 @@ async def export_csv(payload: dict = Depends(verify_token)):
         solar_p = solar_v * solar_i
         row = f"{feed.get('created_at','')},{solar_v},{solar_i},{solar_p},{feed.get('field3','')},{feed.get('field1','')},{feed.get('field2','')},{feed.get('field7','')},{feed.get('field8','')}\n"
         csv_data += row
-    return {"csv": csv_data, "filename": f"isems_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"}
+
+    filename = f"isems_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 # ==================== HEALTH CHECK ====================
 
 @api_router.get("/health")
 async def health_check():
-    return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
+    # Optionally check ThingSpeak connectivity
+    try:
+        await thingspeak.check_online()
+        ts_status = "ok"
+    except:
+        ts_status = "unreachable"
+    return {
+        "status": "healthy",
+        "thingspeak": ts_status,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
 
 @api_router.get("/")
 async def root():
@@ -359,10 +455,11 @@ async def root():
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, token: str = None):
+    # Optional authentication – if token provided, verify; else allow public (adjust as needed)
     if token:
         try:
             jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        except:
+        except jwt.InvalidTokenError:
             await websocket.close(code=4001)
             return
     await manager.connect(websocket)
