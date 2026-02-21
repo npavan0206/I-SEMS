@@ -319,16 +319,21 @@ async def get_load_data(payload: dict = Depends(verify_token)):
                 "current": parse_float(feed.get('field8'))
             })
 
-    load_states = await blynk.get_load_states()
+    # Get load states and per‑load metrics from Blynk
+    load_states = await blynk.get_load_states()          # returns {light_on, fan_on, pump_on}
+    load_metrics = await blynk.get_load_metrics()        # returns per‑load voltage, current, power
+
     load_data = data.load.model_dump()
     load_data.update(load_states)
+    load_data.update(load_metrics)                       # merge per‑load metrics
 
     predictions = await predictor.get_predictions()
     return {
         "current": load_data,
         "history": history,
         "predictions": {"load_demand_1h": predictions['linear_regression'].get('load_demand_1h', 0)},
-        "device_online": data.device_online
+        "device_online": data.device_online,
+        "battery_soc": data.battery.soc                  # needed for pump lock
     }
 
 @api_router.post("/load/control")
