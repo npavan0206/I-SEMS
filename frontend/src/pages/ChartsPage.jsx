@@ -3,7 +3,7 @@ import { Navbar } from '@/components/dashboard/Navbar';
 import { api } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BarChart3, Sun, Battery, Plug, Download, RefreshCw } from 'lucide-react';
+import { BarChart3, Sun, Battery, Plug, Download, RefreshCw, Calendar, X, Filter } from 'lucide-react';
 import {
   LineChart,
   Line,
@@ -41,6 +41,12 @@ export default function ChartsPage() {
   const [loading, setLoading] = useState(true);
   const [deviceOnline, setDeviceOnline] = useState(true);
 
+  // Date range filter state
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [filteredData, setFilteredData] = useState([]);
+  const [showFilter, setShowFilter] = useState(false); // toggle filter panel
+
   const fetchData = useCallback(async () => {
     try {
       const data = await api.getHistory(200);
@@ -52,6 +58,39 @@ export default function ChartsPage() {
       setLoading(false);
     }
   }, []);
+
+  // Apply date filter whenever historyData or dates change
+  useEffect(() => {
+    if (!historyData.length) {
+      setFilteredData([]);
+      return;
+    }
+
+    let filtered = historyData;
+
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      // If only date (no time) provided, set to start/end of day
+      if (startDate.length === 10) start.setHours(0, 0, 0, 0);
+      if (endDate.length === 10) end.setHours(23, 59, 59, 999);
+
+      filtered = historyData.filter(item => {
+        const itemDate = parseISO(item.timestamp);
+        return itemDate >= start && itemDate <= end;
+      });
+    } else if (startDate) {
+      const start = new Date(startDate);
+      if (startDate.length === 10) start.setHours(0, 0, 0, 0);
+      filtered = historyData.filter(item => parseISO(item.timestamp) >= start);
+    } else if (endDate) {
+      const end = new Date(endDate);
+      if (endDate.length === 10) end.setHours(23, 59, 59, 999);
+      filtered = historyData.filter(item => parseISO(item.timestamp) <= end);
+    }
+
+    setFilteredData(filtered);
+  }, [historyData, startDate, endDate]);
 
   useEffect(() => {
     fetchData();
@@ -75,7 +114,12 @@ export default function ChartsPage() {
     }
   };
 
-  const chartData = historyData.map(item => ({
+  const clearDateFilter = () => {
+    setStartDate('');
+    setEndDate('');
+  };
+
+  const chartData = filteredData.map(item => ({
     ...item,
     time: item.timestamp ? format(parseISO(item.timestamp), 'HH:mm') : '',
   }));
@@ -109,11 +153,22 @@ export default function ChartsPage() {
           </div>
           
           <div className="flex items-center gap-3">
-            <Button onClick={fetchData} variant="outline" className="btn-ghost" data-testid="refresh-charts-btn">
+            {/* Filter toggle button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilter(!showFilter)}
+              className={`btn-ghost ${showFilter ? 'bg-primary/20' : ''}`}
+              title="Toggle date filter"
+              data-testid="toggle-filter-btn"
+            >
+              <Filter className="w-4 h-4" />
+            </Button>
+            <Button onClick={fetchData} variant="outline" size="sm" className="btn-ghost" data-testid="refresh-charts-btn">
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
             </Button>
-            <Button onClick={handleExportCSV} variant="outline" className="btn-ghost" data-testid="export-charts-csv">
+            <Button onClick={handleExportCSV} variant="outline" size="sm" className="btn-ghost" data-testid="export-charts-csv">
               <Download className="w-4 h-4 mr-2" />
               Export CSV
             </Button>
@@ -127,6 +182,49 @@ export default function ChartsPage() {
               <span className="w-2 h-2 rounded-full bg-load animate-pulse" />
               Device Offline - Showing cached data
             </p>
+          </div>
+        )}
+
+        {/* Date Range Filter - Collapsible */}
+        {showFilter && (
+          <div className="glass-card rounded-2xl p-5 mb-6 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="flex items-center gap-4 flex-wrap">
+              <Calendar className="w-5 h-5 text-primary" />
+              <div className="flex items-center gap-2">
+                <label htmlFor="start-date" className="text-sm text-muted-foreground">From:</label>
+                <input
+                  type="datetime-local"
+                  id="start-date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label htmlFor="end-date" className="text-sm text-muted-foreground">To:</label>
+                <input
+                  type="datetime-local"
+                  id="end-date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              {(startDate || endDate) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearDateFilter}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <X className="w-4 h-4 mr-1" />
+                  Clear
+                </Button>
+              )}
+              <span className="text-sm text-muted-foreground ml-auto">
+                {filteredData.length} of {historyData.length} points
+              </span>
+            </div>
           </div>
         )}
 
@@ -199,7 +297,7 @@ export default function ChartsPage() {
                 </div>
               ) : (
                 <div className="h-80 flex items-center justify-center text-muted-foreground">
-                  No data available
+                  No data available for selected range
                 </div>
               )}
             </div>
@@ -241,7 +339,7 @@ export default function ChartsPage() {
                   </div>
                 ) : (
                   <div className="h-64 flex items-center justify-center text-muted-foreground">
-                    No data available
+                    No data available for selected range
                   </div>
                 )}
               </div>
@@ -285,7 +383,7 @@ export default function ChartsPage() {
                   </div>
                 ) : (
                   <div className="h-64 flex items-center justify-center text-muted-foreground">
-                    No data available
+                    No data available for selected range
                   </div>
                 )}
               </div>
@@ -329,7 +427,7 @@ export default function ChartsPage() {
                   </div>
                 ) : (
                   <div className="h-64 flex items-center justify-center text-muted-foreground">
-                    No data available
+                    No data available for selected range
                   </div>
                 )}
               </div>
@@ -373,7 +471,7 @@ export default function ChartsPage() {
                   </div>
                 ) : (
                   <div className="h-64 flex items-center justify-center text-muted-foreground">
-                    No data available
+                    No data available for selected range
                   </div>
                 )}
               </div>
@@ -416,7 +514,7 @@ export default function ChartsPage() {
                   </div>
                 ) : (
                   <div className="h-64 flex items-center justify-center text-muted-foreground">
-                    No data available
+                    No data available for selected range
                   </div>
                 )}
               </div>
@@ -451,7 +549,7 @@ export default function ChartsPage() {
                   </div>
                 ) : (
                   <div className="h-64 flex items-center justify-center text-muted-foreground">
-                    No data available
+                    No data available for selected range
                   </div>
                 )}
               </div>
@@ -464,24 +562,24 @@ export default function ChartsPage() {
           <h3 className="font-rajdhani font-semibold text-lg mb-4">Data Statistics</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
             <div className="p-4 rounded-xl bg-white/5">
-              <p className="text-3xl font-mono font-bold text-primary">{chartData.length}</p>
+              <p className="text-3xl font-mono font-bold text-primary">{filteredData.length}</p>
               <p className="text-xs text-muted-foreground mt-1">Data Points</p>
             </div>
             <div className="p-4 rounded-xl bg-white/5">
               <p className="text-3xl font-mono font-bold text-solar">
-                {chartData.length > 0 ? Math.max(...chartData.map(d => d.solar_power || 0)).toFixed(0) : 0}
+                {filteredData.length > 0 ? Math.max(...filteredData.map(d => d.solar_power || 0)).toFixed(0) : 0}
               </p>
               <p className="text-xs text-muted-foreground mt-1">Peak Solar (W)</p>
             </div>
             <div className="p-4 rounded-xl bg-white/5">
               <p className="text-3xl font-mono font-bold text-battery">
-                {chartData.length > 0 ? Math.max(...chartData.map(d => d.battery_soc || 0)).toFixed(0) : 0}
+                {filteredData.length > 0 ? Math.max(...filteredData.map(d => d.battery_soc || 0)).toFixed(0) : 0}
               </p>
               <p className="text-xs text-muted-foreground mt-1">Max SOC (%)</p>
             </div>
             <div className="p-4 rounded-xl bg-white/5">
               <p className="text-3xl font-mono font-bold text-load">
-                {chartData.length > 0 ? Math.max(...chartData.map(d => d.load_power || 0)).toFixed(0) : 0}
+                {filteredData.length > 0 ? Math.max(...filteredData.map(d => d.load_power || 0)).toFixed(0) : 0}
               </p>
               <p className="text-xs text-muted-foreground mt-1">Peak Load (W)</p>
             </div>
