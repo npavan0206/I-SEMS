@@ -46,10 +46,10 @@ class BlynkService:
 
     async def get_load_states(self) -> dict:
         """Retrieve current states of all loads from Blynk."""
-        # Using correct pins: V30 = pump, V31 = light, V32 = fan
-        light = await self.get_pin_value("V31")
-        fan = await self.get_pin_value("V32")
-        pump = await self.get_pin_value("V30")
+        # Pins: V30 = Light, V31 = Fan, V32 = Pump (matches Blynk config)
+        light = await self.get_pin_value("V30")
+        fan = await self.get_pin_value("V31")
+        pump = await self.get_pin_value("V32")
         return {
             "light_on": light == "1",
             "fan_on": fan == "1",
@@ -59,25 +59,25 @@ class BlynkService:
     async def get_load_metrics(self) -> dict:
         """
         Retrieve per‑load voltage, current, and power from Blynk.
-        Pin mapping (adjust these to match your actual Blynk project):
-          - Light:  voltage V33, current V34, power V35
-          - Fan:    voltage V36, current V37, power V38
-          - Pump:   voltage V39, current V40, power V41
+        Pin mapping matches Arduino code:
+          - Pump:   voltage V10, current V11, power V12
+          - Light:  voltage V14, current V15, power V16
+          - Fan:    voltage V18, current V19, power V20
         """
+        # Pump metrics
+        pump_voltage = parse_float(await self.get_pin_value("V10"))
+        pump_current = parse_float(await self.get_pin_value("V11"))
+        pump_power   = parse_float(await self.get_pin_value("V12"))
+
         # Light metrics
-        light_voltage = parse_float(await self.get_pin_value("V33"))
-        light_current = parse_float(await self.get_pin_value("V34"))
-        light_power   = parse_float(await self.get_pin_value("V35"))
+        light_voltage = parse_float(await self.get_pin_value("V14"))
+        light_current = parse_float(await self.get_pin_value("V15"))
+        light_power   = parse_float(await self.get_pin_value("V16"))
 
         # Fan metrics
-        fan_voltage   = parse_float(await self.get_pin_value("V36"))
-        fan_current   = parse_float(await self.get_pin_value("V37"))
-        fan_power     = parse_float(await self.get_pin_value("V38"))
-
-        # Pump metrics
-        pump_voltage  = parse_float(await self.get_pin_value("V39"))
-        pump_current  = parse_float(await self.get_pin_value("V40"))
-        pump_power    = parse_float(await self.get_pin_value("V41"))
+        fan_voltage = parse_float(await self.get_pin_value("V18"))
+        fan_current = parse_float(await self.get_pin_value("V19"))
+        fan_power   = parse_float(await self.get_pin_value("V20"))
 
         return {
             "light_voltage": light_voltage,
