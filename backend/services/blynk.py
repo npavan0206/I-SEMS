@@ -2,8 +2,9 @@
 import aiohttp
 import asyncio
 import logging
-from core.config import BLYNK_AUTH_TOKEN, BLYNK_BASE_URL
+from core.config import BLYNK_AUTH_TOKEN, BLYNK_BASE_URL, CACHE_TTL_SECONDS
 from utils.helpers import parse_float
+from services.cache import cache
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +25,13 @@ class BlynkService:
                 async with session.get(url) as resp:
                     if resp.status == 200:
                         logger.info(f"Blynk set {pin} to {value}")
+                        # Invalidate cache for states/metrics since they changed
+                        cache.delete("load_states")
+                        cache.delete("load_metrics")
                         return True
                     else:
-                        logger.error(f"Blynk set failed for {pin}: {resp.status}")
+                        text = await resp.text()
+                        logger.error(f"Blynk set failed for {pin}: {resp.status} - {text}")
                         return False
         except asyncio.TimeoutError:
             logger.error(f"Blynk set timeout for {pin}")
@@ -46,7 +51,9 @@ class BlynkService:
                         data = await resp.json()
                         return str(data[0]) if data else "0"
                     else:
-                        logger.error(f"Blynk get failed for {pin}: {resp.status}")
+                        text = await resp.text()
+                        logger.error(f"Blynk get failed for {pin}: {resp.status} - {text}")
+                        # If rate limit error, cache a special marker to avoid repeated failures?
                         return "0"
         except asyncio.TimeoutError:
             logger.error(f"Blynk get timeout for {pin}")
@@ -56,43 +63,46 @@ class BlynkService:
             return "0"
 
     async def get_load_states(self) -> dict:
-        """Retrieve current states of all loads from Blynk."""
-        # Pins: V30 = Light, V31 = Fan, V32 = Pump
+        """Retrieve current states of all loads from Blynk, with caching."""
+        cached = cache.get("load_states")
+        if cached:
+            return cached
+
+        # Fetch concurrently
         light, fan, pump = await asyncio.gather(
             self.get_pin_value("V30"),
             self.get_pin_value("V31"),
             self.get_pin_value("V32"),
             return_exceptions=True
         )
-        # Handle any exceptions (they will be returned as exception objects)
-        return {
+
+        result = {
             "light_on": light == "1" if not isinstance(light, Exception) else False,
             "fan_on": fan == "1" if not isinstance(fan, Exception) else False,
             "pump_on": pump == "1" if not isinstance(pump, Exception) else False,
         }
+        # Cache for 30 seconds (or your configured CACHE_TTL_SECONDS)
+        cache.set("load_states", result, ttl=CACHE_TTL_SECONDS)
+        return result
 
     async def get_load_metrics(self) -> dict:
-        """
-        Retrieve per‑load voltage, current, and power from Blynk.
-        Pin mapping:
-          - Pump:   voltage V10, current V11, power V12
-          - Light:  voltage V14, current V15, power V16
-          - Fan:    voltage V18, current V19, power V20
-        """
-        # Fetch all metrics concurrently
+        """Retrieve per‑load metrics from Blynk, with caching."""
+        cached = cache.get("load_metrics")
+        if cached:
+            return cached
+
         pins = ["V10", "V11", "V12", "V14", "V15", "V16", "V18", "V19", "V20"]
         results = await asyncio.gather(
             *[self.get_pin_value(pin) for pin in pins],
             return_exceptions=True
         )
 
-        # Helper to parse or default to 0.0
         def safe_parse(val, default=0.0):
             if isinstance(val, Exception):
                 return default
             return parse_float(val)
 
-        return {
+        result = {
             "pump_voltage": safe_parse(results[0]),
             "pump_current": safe_parse(results[1]),
             "pump_power": safe_parse(results[2]),
@@ -103,6 +113,8 @@ class BlynkService:
             "fan_current": safe_parse(results[7]),
             "fan_power": safe_parse(results[8]),
         }
+        cache.set("load_metrics", result, ttl=CACHE_TTL_SECONDS)
+        return result
 
 # Singleton instance
 blynk = BlynkService()
