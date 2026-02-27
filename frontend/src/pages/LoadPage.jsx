@@ -38,7 +38,7 @@ export default function LoadPage() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 30000); // 30 seconds
+    const interval = setInterval(fetchData, 60000); // 60 seconds to reduce Blynk calls
     return () => clearInterval(interval);
   }, [fetchData]);
 
@@ -62,7 +62,7 @@ export default function LoadPage() {
   const deviceOnline = loadData?.device_online ?? false;
   const batterySoc = loadData?.battery_soc ?? 100;
 
-  // Define all possible loads with their metrics
+  // Define all loads
   const allLoads = [
     {
       id: 'light',
@@ -99,9 +99,7 @@ export default function LoadPage() {
     }
   ];
 
-  // Filter to only show loads that are ON
   const activeLoads = allLoads.filter(load => load.isOn);
-
   const batteryStatus = predictions?.battery_status || "Insufficient data for prediction";
 
   return (
@@ -180,10 +178,7 @@ export default function LoadPage() {
             {activeLoads.map(load => {
               const Icon = load.icon;
               return (
-                <div
-                  key={load.id}
-                  className="glass-card rounded-2xl p-6 neon-border-load"
-                >
+                <div key={load.id} className="glass-card rounded-2xl p-6 neon-border-load">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="w-12 h-12 rounded-xl bg-load/20 flex items-center justify-center">
                       <Icon className="w-6 h-6 text-load" />
@@ -195,10 +190,7 @@ export default function LoadPage() {
                       </span>
                     </div>
                   </div>
-
                   <p className="text-sm text-muted-foreground mb-4">{load.description}</p>
-
-                  {/* Load Metrics */}
                   <div className="grid grid-cols-3 gap-2 text-center text-xs">
                     <div className="p-2 rounded-md bg-white/5">
                       <Zap className="w-3 h-3 mx-auto mb-1 text-load" />
@@ -216,7 +208,6 @@ export default function LoadPage() {
                       <span className="text-muted-foreground">W</span>
                     </div>
                   </div>
-
                   <div className="mt-4 text-center">
                     <span className="inline-flex items-center gap-2 text-sm font-medium text-load">
                       <span className="w-2 h-2 rounded-full bg-load animate-pulse" />
@@ -237,45 +228,16 @@ export default function LoadPage() {
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                  <XAxis 
-                    dataKey="time" 
-                    stroke="rgba(255,255,255,0.5)"
-                    tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 10 }}
-                  />
-                  <YAxis 
-                    stroke="rgba(255,255,255,0.5)"
-                    tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 10 }}
-                  />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'rgba(0,0,0,0.8)', 
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: '8px'
-                    }}
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey="power" 
-                    name="Power (W)"
-                    stroke="#EF4444" 
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey="current" 
-                    name="Current (A)"
-                    stroke="#66FCF1" 
-                    strokeWidth={2}
-                    dot={false}
-                  />
+                  <XAxis dataKey="time" stroke="rgba(255,255,255,0.5)" tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 10 }} />
+                  <YAxis stroke="rgba(255,255,255,0.5)" tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 10 }} />
+                  <Tooltip contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }} />
+                  <Line type="monotone" dataKey="power" name="Power (W)" stroke="#EF4444" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="current" name="Current (A)" stroke="#66FCF1" strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="h-64 flex items-center justify-center text-muted-foreground">
-              No data available
-            </div>
+            <div className="h-64 flex items-center justify-center text-muted-foreground">No data available</div>
           )}
         </div>
 
@@ -293,7 +255,7 @@ export default function LoadPage() {
             <div className="p-4 rounded-xl bg-white/5 border border-white/10">
               <p className="text-sm text-muted-foreground mb-2">Load Scheduling</p>
               <p className="text-sm">
-                {(current.power || 0) > 50 
+                {(current.power || 0) > 50
                   ? 'Consider reducing non-essential loads to conserve battery during low solar hours.'
                   : 'Current load levels are optimal for battery conservation.'}
               </p>
