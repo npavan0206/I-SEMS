@@ -32,8 +32,8 @@ THINGSPEAK_BASE_URL = "https://api.thingspeak.com"
 BLYNK_AUTH_TOKEN = os.environ.get('BLYNK_AUTH_TOKEN', 'yRiXDwdvT4p1j-d-M4tIe4rpEBbNV5ue')
 BLYNK_BASE_URL = os.environ.get('BLYNK_BASE_URL', 'https://blynk.cloud/external/api')
 
-# Cache Configuration
-CACHE_TTL_SECONDS = 10
+# Cache Configuration – used by both dashboard and Blynk caching
+CACHE_TTL_SECONDS = int(os.environ.get('CACHE_TTL_SECONDS', 30))  # default 30 seconds
 
 # Server Configuration
 PORT = int(os.environ.get('PORT', 8001))
