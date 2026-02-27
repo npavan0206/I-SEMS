@@ -40,17 +40,17 @@ export default function LoadPage() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 10000);
+    // ⏱️ Increased to 30 seconds to reduce Blynk API calls
+    const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, [fetchData]);
 
   const handleToggle = async (device, currentState) => {
     setControlling(prev => ({ ...prev, [device]: true }));
     try {
-      const result = await api.controlLoad(device, !currentState);
+      await api.controlLoad(device, !currentState);
       toast.success(`${device} ${!currentState ? 'enabled' : 'disabled'}`);
-      // Immediately refetch to get updated states from backend
-      await fetchData();
+      await fetchData(); // Refresh after toggle
     } catch (error) {
       toast.error(error.message || `Failed to control ${device}`);
     } finally {
@@ -76,11 +76,9 @@ export default function LoadPage() {
 
   const current = loadData?.current || {};
   const deviceOnline = loadData?.device_online ?? false;
-  // battery_soc is now provided by the backend (added to /load endpoint)
   const batterySoc = loadData?.battery_soc ?? 100;
 
-  // Define each load with its details – assumes backend returns:
-  // light_on, fan_on, pump_on, and optionally light_voltage, light_current, light_power, etc.
+  // Define loads – metrics now default to 0.0 if undefined
   const loads = [
     {
       id: 'light',
@@ -91,10 +89,9 @@ export default function LoadPage() {
       tierLabel: 'Essential',
       description: 'Indoor lighting system',
       locked: false,
-      // Per-load details (optional – if missing, show '—')
-      voltage: current.light_voltage,
-      current: current.light_current,
-      power: current.light_power
+      voltage: current.light_voltage ?? 0.0,
+      current: current.light_current ?? 0.0,
+      power: current.light_power ?? 0.0
     },
     {
       id: 'fan',
@@ -105,9 +102,9 @@ export default function LoadPage() {
       tierLabel: 'Semi-Essential',
       description: 'Ventilation system',
       locked: false,
-      voltage: current.fan_voltage,
-      current: current.fan_current,
-      power: current.fan_power
+      voltage: current.fan_voltage ?? 0.0,
+      current: current.fan_current ?? 0.0,
+      power: current.fan_power ?? 0.0
     },
     {
       id: 'pump',
@@ -118,9 +115,9 @@ export default function LoadPage() {
       tierLabel: 'Non-Essential',
       description: 'Water pumping system',
       locked: batterySoc < 20,
-      voltage: current.pump_voltage,
-      current: current.pump_current,
-      power: current.pump_power
+      voltage: current.pump_voltage ?? 0.0,
+      current: current.pump_current ?? 0.0,
+      power: current.pump_power ?? 0.0
     }
   ];
 
@@ -234,26 +231,26 @@ export default function LoadPage() {
 
                 <p className="text-sm text-muted-foreground mb-4">{load.description}</p>
 
-                {/* Per‑Load Metrics */}
+                {/* Per‑Load Metrics – now always show numbers (0.0 if off) */}
                 <div className="grid grid-cols-3 gap-2 mb-4 text-center text-xs">
                   <div className="p-2 rounded-md bg-white/5">
                     <Zap className="w-3 h-3 mx-auto mb-1 text-load" />
                     <span className="block font-mono font-bold">
-                      {load.voltage !== undefined ? load.voltage.toFixed(1) : '—'}
+                      {load.voltage.toFixed(1)}
                     </span>
                     <span className="text-muted-foreground">V</span>
                   </div>
                   <div className="p-2 rounded-md bg-white/5">
                     <Activity className="w-3 h-3 mx-auto mb-1 text-load" />
                     <span className="block font-mono font-bold">
-                      {load.current !== undefined ? load.current.toFixed(2) : '—'}
+                      {load.current.toFixed(2)}
                     </span>
                     <span className="text-muted-foreground">A</span>
                   </div>
                   <div className="p-2 rounded-md bg-white/5">
                     <Plug className="w-3 h-3 mx-auto mb-1 text-load" />
                     <span className="block font-mono font-bold">
-                      {load.power !== undefined ? load.power.toFixed(1) : '—'}
+                      {load.power.toFixed(1)}
                     </span>
                     <span className="text-muted-foreground">W</span>
                   </div>
