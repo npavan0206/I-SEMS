@@ -3,7 +3,7 @@ import { Navbar } from '@/components/dashboard/Navbar';
 import { api } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Plug, Lightbulb, Fan, Droplets, RefreshCw, AlertTriangle, Lock, Brain, Activity, Zap } from 'lucide-react';
+import { Plug, Lightbulb, Fan, Droplets, RefreshCw, AlertTriangle, Lock, Brain, Activity } from 'lucide-react';
 import {
   LineChart,
   Line,
@@ -86,10 +86,7 @@ export default function LoadPage() {
       tier: 'essential',
       tierLabel: 'Essential',
       description: 'Indoor lighting system',
-      locked: false,
-      voltage: current.light_voltage ?? 0.0,
-      current: current.light_current ?? 0.0,
-      power: current.light_power ?? 0.0
+      locked: false
     },
     {
       id: 'fan',
@@ -99,10 +96,7 @@ export default function LoadPage() {
       tier: 'semi-essential',
       tierLabel: 'Semi-Essential',
       description: 'Ventilation system',
-      locked: false,
-      voltage: current.fan_voltage ?? 0.0,
-      current: current.fan_current ?? 0.0,
-      power: current.fan_power ?? 0.0
+      locked: false
     },
     {
       id: 'pump',
@@ -112,10 +106,7 @@ export default function LoadPage() {
       tier: 'non-essential',
       tierLabel: 'Non-Essential',
       description: 'Water pumping system',
-      locked: batterySoc < 20,
-      voltage: current.pump_voltage ?? 0.0,
-      current: current.pump_current ?? 0.0,
-      power: current.pump_power ?? 0.0
+      locked: batterySoc < 20
     }
   ];
 
@@ -185,7 +176,7 @@ export default function LoadPage() {
           </div>
         </div>
 
-        {/* Load Controls with Switches */}
+        {/* Load Controls with Switches Only */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {loads.map(load => {
             const Icon = load.icon;
@@ -229,33 +220,9 @@ export default function LoadPage() {
 
                 <p className="text-sm text-muted-foreground mb-4">{load.description}</p>
 
-                {/* Load Metrics (always show numbers, zero if off) */}
-                <div className="grid grid-cols-3 gap-2 mb-4 text-center text-xs">
-                  <div className="p-2 rounded-md bg-white/5">
-                    <Zap className="w-3 h-3 mx-auto mb-1 text-load" />
-                    <span className="block font-mono font-bold">{load.voltage.toFixed(1)}</span>
-                    <span className="text-muted-foreground">V</span>
-                  </div>
-                  <div className="p-2 rounded-md bg-white/5">
-                    <Activity className="w-3 h-3 mx-auto mb-1 text-load" />
-                    <span className="block font-mono font-bold">{load.current.toFixed(2)}</span>
-                    <span className="text-muted-foreground">A</span>
-                  </div>
-                  <div className="p-2 rounded-md bg-white/5">
-                    <Plug className="w-3 h-3 mx-auto mb-1 text-load" />
-                    <span className="block font-mono font-bold">{load.power.toFixed(1)}</span>
-                    <span className="text-muted-foreground">W</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className={`text-sm font-medium ${load.isOn ? 'text-load' : 'text-muted-foreground'}`}>
-                    {load.isOn ? 'Active' : 'Inactive'}
-                  </span>
-                  {isControlling && (
-                    <span className="text-xs text-muted-foreground animate-pulse">Updating...</span>
-                  )}
-                </div>
+                {isControlling && (
+                  <div className="text-xs text-muted-foreground animate-pulse text-center">Updating...</div>
+                )}
 
                 {load.locked && (
                   <div className="mt-4 p-3 rounded-lg bg-solar/10 border border-solar/20">
