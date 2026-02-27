@@ -1,4 +1,3 @@
-# services/blynk.py
 import aiohttp
 import asyncio
 import logging
@@ -7,7 +6,6 @@ from utils.helpers import parse_float
 from services.cache import cache
 
 logger = logging.getLogger(__name__)
-
 BLYNK_TIMEOUT = 5
 
 class BlynkService:
@@ -82,7 +80,7 @@ class BlynkService:
         if cached:
             return cached
 
-        # Correct pin mapping: Light V14-16, Fan V18-20, Pump V10-12
+        # Correct order: light V14-16, fan V18-20, pump V10-12
         pins = ["V14", "V15", "V16", "V18", "V19", "V20", "V10", "V11", "V12"]
         results = await asyncio.gather(
             *[self.get_pin_value(pin) for pin in pins],
