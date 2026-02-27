@@ -1,6 +1,3 @@
-"""
-In-Memory Cache Service
-"""
 from datetime import datetime, timezone, timedelta
 from typing import Any, Optional, Dict
 
@@ -11,24 +8,20 @@ class CacheService:
         self._default_ttl = default_ttl
 
     def get(self, key: str) -> Optional[Any]:
-        """Get value from cache if not expired."""
         if key in self._store and key in self._expiry:
             if datetime.now(timezone.utc) < self._expiry[key]:
                 return self._store[key]
             else:
-                # Clean up expired entry
                 del self._store[key]
                 del self._expiry[key]
         return None
 
     def set(self, key: str, value: Any, ttl: int = None) -> None:
-        """Set value in cache with TTL (in seconds)."""
         ttl = ttl or self._default_ttl
         self._store[key] = value
         self._expiry[key] = datetime.now(timezone.utc) + timedelta(seconds=ttl)
 
     def delete(self, key: str) -> bool:
-        """Delete key from cache. Returns True if existed."""
         if key in self._store:
             del self._store[key]
             if key in self._expiry:
@@ -37,9 +30,7 @@ class CacheService:
         return False
 
     def clear(self) -> None:
-        """Clear all cache entries."""
         self._store.clear()
         self._expiry.clear()
 
-# Global cache instance – default TTL is overridden by config in endpoints
 cache = CacheService(default_ttl=10)
