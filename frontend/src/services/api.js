@@ -1,89 +1,9 @@
+// src/services/api.js
 // API Service for ISEMS Frontend
-const API_URL = process.env.REACT_APP_BACKEND_URL;
-if (!API_URL) throw new Error('REACT_APP_BACKEND_URL is not defined.');
-
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('isems-token');
-  return {
-    'Content-Type': 'application/json',
-    ...(token && { Authorization: `Bearer ${token}` })
-  };
-};
-
-const handleResponse = async (response) => {
-  if (!response.ok) {
-    if (response.status === 401) {
-      localStorage.removeItem('isems-token');
-      window.location.href = '/login';
-    }
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.detail || 'Request failed');
-  }
-  return response.json();
-};
-
-export const api = {
-  // Auth
-  login: (email, password) =>
-    fetch(`${API_URL}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    }).then(handleResponse),
-
-  register: (email, password, name) =>
-    fetch(`${API_URL}/api/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, name })
-    }).then(handleResponse),
-
-  // Dashboard
-  getDashboard: () => fetch(`${API_URL}/api/dashboard`, { headers: getAuthHeaders() }).then(handleResponse),
-  getDashboardPublic: () => fetch(`${API_URL}/api/dashboard/public`).then(handleResponse),
-
-  // Solar
-  getSolar: () => fetch(`${API_URL}/api/solar`, { headers: getAuthHeaders() }).then(handleResponse),
-
-  // Battery
-  getBattery: () => fetch(`${API_URL}/api/battery`, { headers: getAuthHeaders() }).then(handleResponse),
-
-  // Load
-  getLoad: () => fetch(`${API_URL}/api/load`, { headers: getAuthHeaders() }).then(handleResponse),
-
-  // Grid
-  getGrid: () => fetch(`${API_URL}/api/grid`, { headers: getAuthHeaders() }).then(handleResponse),
-  setGridMode: (mode) =>
-    fetch(`${API_URL}/api/grid/mode?mode=${mode}`, {
-      method: 'POST',
-      headers: getAuthHeaders()
-    }).then(handleResponse),
-
-  // Predictions
-  getPredictions: () => fetch(`${API_URL}/api/predictions`, { headers: getAuthHeaders() }).then(handleResponse),
-
-  // History
-  getHistory: (results = 100) =>
-    fetch(`${API_URL}/api/history?results=${results}`, { headers: getAuthHeaders() }).then(handleResponse),
-
-  // Export
-  exportCSV: () => fetch(`${API_URL}/api/export/csv`, { headers: getAuthHeaders() }).then(handleResponse)
-};
-
-export const createWebSocket = (token) => {
-  const WS_URL = process.env.REACT_APP_WS_URL ||
-    API_URL.replace('https://', 'wss://').replace('http://', 'ws://') + '/ws';
-  return new WebSocket(`${WS_URL}?token=${token || ''}`);
-};
-
-export default api;// API Service for ISEMS Frontend
-// Ensure REACT_APP_BACKEND_URL is set in environment variables
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 if (!API_URL) {
-  throw new Error(
-    'REACT_APP_BACKEND_URL is not defined. Please set it in your environment variables.'
-  );
+  throw new Error('REACT_APP_BACKEND_URL is not defined. Please set it in your environment variables.');
 }
 
 const WS_URL = process.env.REACT_APP_WS_URL || 
@@ -106,7 +26,7 @@ const handleResponse = async (response) => {
     } catch {
       errorDetail = response.statusText || errorDetail;
     }
-    // If unauthorized, you may want to redirect to login
+    // If unauthorized, redirect to login
     if (response.status === 401) {
       localStorage.removeItem('isems-token');
       window.location.href = '/login';
@@ -223,7 +143,7 @@ export const api = {
   }
 };
 
-// WebSocket connection (optional, used in Dashboard)
+// WebSocket connection
 export const createWebSocket = (token) => {
   if (!WS_URL) {
     throw new Error('WebSocket URL could not be constructed. Check REACT_APP_BACKEND_URL or set REACT_APP_WS_URL.');
