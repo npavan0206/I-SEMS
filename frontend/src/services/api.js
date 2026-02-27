@@ -28,6 +28,11 @@ const handleResponse = async (response) => {
     } catch {
       errorDetail = response.statusText || errorDetail;
     }
+    // If unauthorized, you may want to redirect to login
+    if (response.status === 401) {
+      localStorage.removeItem('isems-token');
+      window.location.href = '/login';
+    }
     throw new Error(errorDetail);
   }
   return response.json();
@@ -87,9 +92,7 @@ export const api = {
     const response = await fetch(`${API_URL}/api/load`, {
       headers: getAuthHeaders()
     });
-    const data = await handleResponse(response);
-    // Ensure battery_soc is present (backend already adds it)
-    return data;
+    return handleResponse(response);
   },
 
   controlLoad: async (device, state) => {
@@ -142,7 +145,7 @@ export const api = {
   }
 };
 
-// WebSocket connection
+// WebSocket connection (optional, used in Dashboard)
 export const createWebSocket = (token) => {
   if (!WS_URL) {
     throw new Error('WebSocket URL could not be constructed. Check REACT_APP_BACKEND_URL or set REACT_APP_WS_URL.');
