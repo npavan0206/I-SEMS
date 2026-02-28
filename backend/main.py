@@ -344,8 +344,8 @@ async def control_load(control: LoadControl, payload: dict = Depends(verify_toke
         raise HTTPException(status_code=400, detail="Cannot enable pump: Battery SOC below 20%. Pump locked.")
     if control.device == "light" and control.state and data.battery.soc < 10:
         raise HTTPException(status_code=400, detail="Critical battery level: Only essential loads allowed.")
-    # Correct pin mapping: light V30, fan V31, pump V32
-    pin_map = {"light": "V30", "fan": "V31", "pump": "V32"}
+    # ✅ CORRECTED pin mapping: light V31, fan V32, pump V30 (matching Arduino)
+    pin_map = {"light": "V31", "fan": "V32", "pump": "V30"}
     pin = pin_map.get(control.device)
     if not pin:
         raise HTTPException(status_code=400, detail="Invalid device")
