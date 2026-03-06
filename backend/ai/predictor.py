@@ -75,9 +75,8 @@ class AIPredictor:
             # Feature engineering
             df['hour'] = df['created_at'].dt.hour
             df['dayofweek'] = df['created_at'].dt.dayofweek
-            # Rolling mean of last 6 readings (30 min)
-            df['rolling_power'] = df['solar_power'].rolling(window=6, min_periods=1).mean().fillna(method='bfill')
-            # Also include current solar V and I
+            # Rolling mean of last 6 readings (30 min) – use bfill() instead of fillna(method='bfill')
+            df['rolling_power'] = df['solar_power'].rolling(window=6, min_periods=1).mean().bfill()
             features = df[['hour', 'dayofweek', 'field5', 'field6', 'rolling_power']].values
             targets = df['target_1h'].values
 
