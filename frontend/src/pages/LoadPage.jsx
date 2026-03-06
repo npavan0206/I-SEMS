@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Navbar } from '@/components/dashboard/Navbar';
 import { api } from '@/services/api';
 import { Button } from '@/components/ui/button';
-import { Plug, Lightbulb, Fan, Droplets, RefreshCw, Brain, Activity, Calendar } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Plug, Lightbulb, Fan, Droplets, RefreshCw, AlertTriangle, Lock, Brain, Activity, Calendar } from 'lucide-react';
 import {
   LineChart,
   Line,
@@ -14,17 +15,32 @@ import {
 } from 'recharts';
 import { format, parseISO, subDays } from 'date-fns';
 import { toast } from 'sonner';
+import { useWebSocket } from '@/hooks/useWebSocket'; // assuming you have a WebSocket hook
 
 export default function LoadPage() {
   const [loadData, setLoadData] = useState(null);
   const [predictions, setPredictions] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [controlling, setControlling] = useState({});
   const [dateRange, setDateRange] = useState({
     start: subDays(new Date(), 1).toISOString().split('T')[0],
     end: new Date().toISOString().split('T')[0]
   });
+  
+  // WebSocket for real-time updates
+  const { lastMessage } = useWebSocket();
+  useEffect(() => {
+    if (lastMessage) {
+      // Assuming WebSocket sends full dashboard data
+      setLoadData(prev => ({ ...prev, current: lastMessage.load }));
+      // Also update deviceOnline if present
+      if (lastMessage.device_online !== undefined) {
+        setLoadData(prev => ({ ...prev, device_online: lastMessage.device_online }));
+      }
+    }
+  }, [lastMessage]);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (showToast = false) => {
     try {
       const [loadResponse, predResponse] = await Promise.all([
         api.getLoad(),
@@ -32,19 +48,35 @@ export default function LoadPage() {
       ]);
       setLoadData(loadResponse);
       setPredictions(predResponse);
+      if (showToast) toast.success('Data refreshed');
     } catch (error) {
       console.error('Failed to fetch load data:', error);
-      toast.error('Could not fetch load data');
+      if (showToast) toast.error('Could not fetch load data');
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // Initial fetch and periodic refresh
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 30000); // 30 seconds
+    fetchData(true);
+    const interval = setInterval(() => fetchData(false), 10000); // 10 seconds
     return () => clearInterval(interval);
   }, [fetchData]);
+
+  const handleToggle = async (device, currentState) => {
+    setControlling(prev => ({ ...prev, [device]: true }));
+    try {
+      await api.controlLoad(device, !currentState);
+      toast.success(`${device} turned ${!currentState ? 'ON' : 'OFF'}`);
+      // Immediately refetch to get updated state
+      await fetchData(false);
+    } catch (error) {
+      toast.error(error.message || `Failed to control ${device}`);
+    } finally {
+      setControlling(prev => ({ ...prev, [device]: false }));
+    }
+  };
 
   const chartData = loadData?.history?.map(item => ({
     ...item,
@@ -67,7 +99,7 @@ export default function LoadPage() {
   const batterySoc = loadData?.battery_soc ?? 100;
   const params = current.params || { light: {}, fan: {}, pump: {} };
 
-  // UI renames: Light -> Fan, Pump -> Light, Fan -> Pump
+  // UI renames: Light -> Fan, Pump -> Light, Fan -> Pump (keeping original IDs for toggles)
   const loads = [
     {
       id: 'light',
@@ -76,7 +108,9 @@ export default function LoadPage() {
       tierLabel: 'Semi-Essential',
       description: 'Ventilation system',
       isOn: current.light_on || false,
-      metrics: params.light
+      metrics: params.light,
+      locked: batterySoc < 20 ? 'pump' : false, // lock pump only
+      // For light, no lock (essential)
     },
     {
       id: 'fan',
@@ -85,7 +119,8 @@ export default function LoadPage() {
       tierLabel: 'Non-Essential',
       description: 'Water pumping system',
       isOn: current.fan_on || false,
-      metrics: params.fan
+      metrics: params.fan,
+      locked: batterySoc < 20 ? true : false,
     },
     {
       id: 'pump',
@@ -94,7 +129,8 @@ export default function LoadPage() {
       tierLabel: 'Essential',
       description: 'Indoor lighting system',
       isOn: current.pump_on || false,
-      metrics: params.pump
+      metrics: params.pump,
+      locked: false,
     }
   ];
 
@@ -112,11 +148,11 @@ export default function LoadPage() {
               <Plug className="w-7 h-7 text-load" />
             </div>
             <div>
-              <h1 className="font-rajdhani font-bold text-3xl tracking-tight">Load Monitoring</h1>
-              <p className="text-muted-foreground text-sm">Real‑time load parameters</p>
+              <h1 className="font-rajdhani font-bold text-3xl tracking-tight">Load Control</h1>
+              <p className="text-muted-foreground text-sm">Real‑time load management</p>
             </div>
           </div>
-          <Button onClick={fetchData} variant="outline" className="btn-ghost" data-testid="refresh-load-btn">
+          <Button onClick={() => fetchData(true)} variant="outline" className="btn-ghost" data-testid="refresh-load-btn">
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
@@ -164,7 +200,7 @@ export default function LoadPage() {
           </div>
         </div>
 
-        {/* Load Parameter Cards */}
+        {/* Load Cards with Switches and Parameters */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {loads.map(load => {
             const Icon = load.icon;
@@ -172,6 +208,7 @@ export default function LoadPage() {
             const v = (m.voltage || 0).toFixed(1);
             const i = (m.current || 0).toFixed(2);
             const p = (m.power || 0).toFixed(1);
+            const isControlling = controlling[load.id];
 
             return (
               <div
@@ -179,20 +216,35 @@ export default function LoadPage() {
                 className={`glass-card rounded-2xl p-6 card-hover ${load.isOn ? 'neon-border-load' : ''}`}
                 data-testid={`load-card-${load.id}`}
               >
-                <div className="flex items-center gap-3 mb-4">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${load.isOn ? 'bg-load/20' : 'bg-muted/20'}`}>
-                    <Icon className={`w-6 h-6 ${load.isOn ? 'text-load' : 'text-muted-foreground'}`} />
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${load.isOn ? 'bg-load/20' : 'bg-muted/20'}`}>
+                      <Icon className={`w-6 h-6 ${load.isOn ? 'text-load' : 'text-muted-foreground'}`} />
+                    </div>
+                    <div>
+                      <h3 className="font-rajdhani font-semibold text-lg">{load.displayName}</h3>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                        load.tierLabel === 'Essential' ? 'bg-battery/20 text-battery' :
+                        load.tierLabel === 'Semi-Essential' ? 'bg-solar/20 text-solar' :
+                        'bg-muted/20 text-muted-foreground'
+                      }`}>
+                        {load.tierLabel}
+                      </span>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-rajdhani font-semibold text-lg">{load.displayName}</h3>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      load.tierLabel === 'Essential' ? 'bg-battery/20 text-battery' :
-                      load.tierLabel === 'Semi-Essential' ? 'bg-solar/20 text-solar' :
-                      'bg-muted/20 text-muted-foreground'
-                    }`}>
-                      {load.tierLabel}
-                    </span>
-                  </div>
+                  
+                  {load.locked ? (
+                    <div className="flex items-center gap-1 text-solar" title="Locked due to low battery">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                  ) : (
+                    <Switch
+                      checked={load.isOn}
+                      onCheckedChange={() => handleToggle(load.id, load.isOn)}
+                      disabled={isControlling || !deviceOnline}
+                      data-testid={`toggle-${load.id}`}
+                    />
+                  )}
                 </div>
 
                 <p className="text-sm text-muted-foreground mb-4">{load.description}</p>
@@ -218,6 +270,19 @@ export default function LoadPage() {
                     {load.isOn ? 'Active' : 'Inactive'}
                   </span>
                 </div>
+
+                {isControlling && (
+                  <div className="mt-2 text-xs text-muted-foreground animate-pulse text-center">Updating...</div>
+                )}
+
+                {load.locked && (
+                  <div className="mt-4 p-3 rounded-lg bg-solar/10 border border-solar/20">
+                    <p className="text-xs text-solar flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4" />
+                      Locked: Battery SOC below 20%
+                    </p>
+                  </div>
+                )}
               </div>
             );
           })}
