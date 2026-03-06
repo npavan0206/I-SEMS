@@ -1,12 +1,9 @@
+# services/blynk.py
 import aiohttp
-import asyncio
 import logging
-from core.config import BLYNK_AUTH_TOKEN, BLYNK_BASE_URL, CACHE_TTL_SECONDS
-from utils.helpers import parse_float
-from services.cache import cache
+from core.config import BLYNK_AUTH_TOKEN, BLYNK_BASE_URL
 
 logger = logging.getLogger(__name__)
-BLYNK_TIMEOUT = 5
 
 class BlynkService:
     def __init__(self):
@@ -16,21 +13,14 @@ class BlynkService:
     async def set_value(self, pin: str, value: str) -> bool:
         url = f"{self.base_url}/update?token={self.token}&pin={pin}&value={value}"
         try:
-            timeout = aiohttp.ClientTimeout(total=BLYNK_TIMEOUT)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with aiohttp.ClientSession() as session:
                 async with session.get(url) as resp:
                     if resp.status == 200:
                         logger.info(f"Blynk set {pin} to {value}")
-                        cache.delete("load_states")
-                        cache.delete("load_metrics")
                         return True
                     else:
-                        text = await resp.text()
-                        logger.error(f"Blynk set failed for {pin}: {resp.status} - {text}")
+                        logger.error(f"Blynk set failed for {pin}: {resp.status}")
                         return False
-        except asyncio.TimeoutError:
-            logger.error(f"Blynk set timeout for {pin}")
-            return False
         except Exception as e:
             logger.error(f"Blynk set error: {e}")
             return False
@@ -38,72 +28,60 @@ class BlynkService:
     async def get_pin_value(self, pin: str) -> str:
         url = f"{self.base_url}/get?token={self.token}&pin={pin}"
         try:
-            timeout = aiohttp.ClientTimeout(total=BLYNK_TIMEOUT)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with aiohttp.ClientSession() as session:
                 async with session.get(url) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         return str(data[0]) if data else "0"
                     else:
-                        text = await resp.text()
-                        logger.error(f"Blynk get failed for {pin}: {resp.status} - {text}")
+                        logger.error(f"Blynk get failed for {pin}: {resp.status}")
                         return "0"
-        except asyncio.TimeoutError:
-            logger.error(f"Blynk get timeout for {pin}")
-            return "0"
         except Exception as e:
             logger.error(f"Blynk get error: {e}")
             return "0"
 
     async def get_load_states(self) -> dict:
-        cached = cache.get("load_states")
-        if cached:
-            return cached
-
-        light, fan, pump = await asyncio.gather(
-            self.get_pin_value("V30"),
-            self.get_pin_value("V31"),
-            self.get_pin_value("V32"),
-            return_exceptions=True
-        )
-
-        result = {
-            "light_on": light == "1" if not isinstance(light, Exception) else False,
-            "fan_on": fan == "1" if not isinstance(fan, Exception) else False,
-            "pump_on": pump == "1" if not isinstance(pump, Exception) else False,
+        light = await self.get_pin_value("V31")
+        fan = await self.get_pin_value("V32")
+        pump = await self.get_pin_value("V30")
+        return {
+            "light_on": light == "1",
+            "fan_on": fan == "1",
+            "pump_on": pump == "1"
         }
-        cache.set("load_states", result, ttl=CACHE_TTL_SECONDS)
-        return result
 
-    async def get_load_metrics(self) -> dict:
-        cached = cache.get("load_metrics")
-        if cached:
-            return cached
+    # NEW: Get per-load parameters (voltage, current, power)
+    async def get_load_params(self) -> dict:
+        # Pump (V30 is state, V10=V, V11=I, V12=P)
+        pump_v = await self.get_pin_value("V10")
+        pump_i = await self.get_pin_value("V11")
+        pump_p = await self.get_pin_value("V12")
+        # Light (V31 state, V14=V, V15=I, V16=P)
+        light_v = await self.get_pin_value("V14")
+        light_i = await self.get_pin_value("V15")
+        light_p = await self.get_pin_value("V16")
+        # Fan (V32 state, V18=V, V19=I, V20=P)
+        fan_v = await self.get_pin_value("V18")
+        fan_i = await self.get_pin_value("V19")
+        fan_p = await self.get_pin_value("V20")
 
-        # Correct order: light V14-16, fan V18-20, pump V10-12
-        pins = ["V14", "V15", "V16", "V18", "V19", "V20", "V10", "V11", "V12"]
-        results = await asyncio.gather(
-            *[self.get_pin_value(pin) for pin in pins],
-            return_exceptions=True
-        )
-
-        def safe_parse(val, default=0.0):
-            if isinstance(val, Exception):
-                return default
-            return parse_float(val)
-
-        result = {
-            "light_voltage": safe_parse(results[0]),
-            "light_current": safe_parse(results[1]),
-            "light_power": safe_parse(results[2]),
-            "fan_voltage": safe_parse(results[3]),
-            "fan_current": safe_parse(results[4]),
-            "fan_power": safe_parse(results[5]),
-            "pump_voltage": safe_parse(results[6]),
-            "pump_current": safe_parse(results[7]),
-            "pump_power": safe_parse(results[8]),
+        return {
+            "pump": {
+                "voltage": float(pump_v),
+                "current": float(pump_i),
+                "power": float(pump_p)
+            },
+            "light": {
+                "voltage": float(light_v),
+                "current": float(light_i),
+                "power": float(light_p)
+            },
+            "fan": {
+                "voltage": float(fan_v),
+                "current": float(fan_i),
+                "power": float(fan_p)
+            }
         }
-        cache.set("load_metrics", result, ttl=CACHE_TTL_SECONDS)
-        return result
 
+# Singleton instance
 blynk = BlynkService()
