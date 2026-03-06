@@ -2,8 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Navbar } from '@/components/dashboard/Navbar';
 import { api } from '@/services/api';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
-import { Plug, Lightbulb, Fan, Droplets, RefreshCw, AlertTriangle, Lock, Brain, Activity } from 'lucide-react';
+import { Plug, Lightbulb, Fan, Droplets, RefreshCw, Brain, Activity } from 'lucide-react';
 import {
   LineChart,
   Line,
@@ -20,7 +19,6 @@ export default function LoadPage() {
   const [loadData, setLoadData] = useState(null);
   const [predictions, setPredictions] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [controlling, setControlling] = useState({});
 
   const fetchData = useCallback(async () => {
     try {
@@ -44,19 +42,6 @@ export default function LoadPage() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  const handleToggle = async (device, currentState) => {
-    setControlling(prev => ({ ...prev, [device]: true }));
-    try {
-      await api.controlLoad(device, !currentState);
-      toast.success(`${device} ${!currentState ? 'enabled' : 'disabled'}`);
-      await fetchData();
-    } catch (error) {
-      toast.error(error.message || `Failed to control ${device}`);
-    } finally {
-      setControlling(prev => ({ ...prev, [device]: false }));
-    }
-  };
-
   const chartData = loadData?.history?.map(item => ({
     ...item,
     time: item.timestamp ? format(parseISO(item.timestamp), 'HH:mm') : '',
@@ -76,37 +61,36 @@ export default function LoadPage() {
   const current = loadData?.current || {};
   const deviceOnline = loadData?.device_online ?? false;
   const batterySoc = loadData?.battery_soc ?? 100;
+  const params = current.params || { light: {}, fan: {}, pump: {} };
 
+  // Load definitions with static info
   const loads = [
     {
       id: 'light',
       name: 'Light',
       icon: Lightbulb,
-      isOn: current.light_on || false,
-      tier: 'essential',
       tierLabel: 'Essential',
       description: 'Indoor lighting system',
-      locked: false
+      isOn: current.light_on || false,
+      metrics: params.light
     },
     {
       id: 'fan',
       name: 'Fan',
       icon: Fan,
-      isOn: current.fan_on || false,
-      tier: 'semi-essential',
       tierLabel: 'Semi-Essential',
       description: 'Ventilation system',
-      locked: false
+      isOn: current.fan_on || false,
+      metrics: params.fan
     },
     {
       id: 'pump',
       name: 'Pump',
       icon: Droplets,
-      isOn: current.pump_on || false,
-      tier: 'non-essential',
       tierLabel: 'Non-Essential',
       description: 'Water pumping system',
-      locked: batterySoc < 20
+      isOn: current.pump_on || false,
+      metrics: params.pump
     }
   ];
 
@@ -124,8 +108,8 @@ export default function LoadPage() {
               <Plug className="w-7 h-7 text-load" />
             </div>
             <div>
-              <h1 className="font-rajdhani font-bold text-3xl tracking-tight">Load Control</h1>
-              <p className="text-muted-foreground text-sm">Smart Load Management</p>
+              <h1 className="font-rajdhani font-bold text-3xl tracking-tight">Load Monitoring</h1>
+              <p className="text-muted-foreground text-sm">Real‑time load parameters</p>
             </div>
           </div>
           <Button onClick={fetchData} variant="outline" className="btn-ghost" data-testid="refresh-load-btn">
@@ -139,7 +123,7 @@ export default function LoadPage() {
           <div className="mb-6 p-4 rounded-xl bg-load/10 border border-load/20">
             <p className="text-load font-medium flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-load animate-pulse" />
-              Device Offline – Controls disabled, showing last known values
+              Device Offline – showing last known values
             </p>
           </div>
         )}
@@ -176,62 +160,60 @@ export default function LoadPage() {
           </div>
         </div>
 
-        {/* Load Controls with Switches Only */}
+        {/* Load Parameter Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {loads.map(load => {
             const Icon = load.icon;
-            const isControlling = controlling[load.id];
+            const m = load.metrics || {};
+            const v = (m.voltage || 0).toFixed(1);
+            const i = (m.current || 0).toFixed(2);
+            const p = (m.power || 0).toFixed(1);
+
             return (
               <div
                 key={load.id}
                 className={`glass-card rounded-2xl p-6 card-hover ${load.isOn ? 'neon-border-load' : ''}`}
-                data-testid={`load-control-${load.id}`}
+                data-testid={`load-card-${load.id}`}
               >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${load.isOn ? 'bg-load/20' : 'bg-muted/20'}`}>
-                      <Icon className={`w-6 h-6 ${load.isOn ? 'text-load' : 'text-muted-foreground'}`} />
-                    </div>
-                    <div>
-                      <h3 className="font-rajdhani font-semibold text-lg">{load.name}</h3>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${
-                        load.tier === 'essential' ? 'bg-battery/20 text-battery' :
-                        load.tier === 'semi-essential' ? 'bg-solar/20 text-solar' :
-                        'bg-muted/20 text-muted-foreground'
-                      }`}>
-                        {load.tierLabel}
-                      </span>
-                    </div>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${load.isOn ? 'bg-load/20' : 'bg-muted/20'}`}>
+                    <Icon className={`w-6 h-6 ${load.isOn ? 'text-load' : 'text-muted-foreground'}`} />
                   </div>
-                  
-                  {load.locked ? (
-                    <div className="flex items-center gap-1 text-solar" title="Locked due to low battery">
-                      <Lock className="w-4 h-4" />
-                    </div>
-                  ) : (
-                    <Switch
-                      checked={load.isOn}
-                      onCheckedChange={() => handleToggle(load.id, load.isOn)}
-                      disabled={isControlling || !deviceOnline}
-                      data-testid={`toggle-${load.id}`}
-                    />
-                  )}
+                  <div>
+                    <h3 className="font-rajdhani font-semibold text-lg">{load.name}</h3>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      load.tierLabel === 'Essential' ? 'bg-battery/20 text-battery' :
+                      load.tierLabel === 'Semi-Essential' ? 'bg-solar/20 text-solar' :
+                      'bg-muted/20 text-muted-foreground'
+                    }`}>
+                      {load.tierLabel}
+                    </span>
+                  </div>
                 </div>
 
                 <p className="text-sm text-muted-foreground mb-4">{load.description}</p>
 
-                {isControlling && (
-                  <div className="text-xs text-muted-foreground animate-pulse text-center">Updating...</div>
-                )}
-
-                {load.locked && (
-                  <div className="mt-4 p-3 rounded-lg bg-solar/10 border border-solar/20">
-                    <p className="text-xs text-solar flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4" />
-                      Locked: Battery SOC below 20%
-                    </p>
+                <div className="space-y-2 text-sm border-t border-white/10 pt-3">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Voltage</span>
+                    <span className="font-mono font-medium">{v} V</span>
                   </div>
-                )}
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Current</span>
+                    <span className="font-mono font-medium">{i} A</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Power</span>
+                    <span className="font-mono font-medium">{p} W</span>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex justify-between items-center text-xs">
+                  <span className="text-muted-foreground">Status</span>
+                  <span className={load.isOn ? 'text-load' : 'text-muted-foreground'}>
+                    {load.isOn ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
               </div>
             );
           })}
