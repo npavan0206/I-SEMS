@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Navbar } from '@/components/dashboard/Navbar';
 import { api } from '@/services/api';
 import { Button } from '@/components/ui/button';
-import { Plug, Lightbulb, Fan, Droplets, RefreshCw, Brain, Activity } from 'lucide-react';
+import { Plug, Lightbulb, Fan, Droplets, RefreshCw, Brain, Activity, Calendar } from 'lucide-react';
 import {
   LineChart,
   Line,
@@ -12,13 +12,17 @@ import {
   Tooltip,
   ResponsiveContainer
 } from 'recharts';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, subDays } from 'date-fns';
 import { toast } from 'sonner';
 
 export default function LoadPage() {
   const [loadData, setLoadData] = useState(null);
   const [predictions, setPredictions] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [dateRange, setDateRange] = useState({
+    start: subDays(new Date(), 1).toISOString().split('T')[0],
+    end: new Date().toISOString().split('T')[0]
+  });
 
   const fetchData = useCallback(async () => {
     try {
@@ -42,6 +46,7 @@ export default function LoadPage() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
+  // Prepare chart data from history (last 50 points)
   const chartData = loadData?.history?.map(item => ({
     ...item,
     time: item.timestamp ? format(parseISO(item.timestamp), 'HH:mm') : '',
@@ -63,12 +68,11 @@ export default function LoadPage() {
   const batterySoc = loadData?.battery_soc ?? 100;
   const params = current.params || { light: {}, fan: {}, pump: {} };
 
-  // Load definitions with static info
   const loads = [
     {
       id: 'light',
       name: 'Light',
-      icon: Lightbulb,
+      icon: Lightbulf,
       tierLabel: 'Essential',
       description: 'Indoor lighting system',
       isOn: current.light_on || false,
@@ -109,7 +113,7 @@ export default function LoadPage() {
             </div>
             <div>
               <h1 className="font-rajdhani font-bold text-3xl tracking-tight">Load Monitoring</h1>
-              <p className="text-muted-foreground text-sm">Real‑time load parameters</p>
+              <p className="text-muted-foreground text-sm">Real‑time load parameters & history</p>
             </div>
           </div>
           <Button onClick={fetchData} variant="outline" className="btn-ghost" data-testid="refresh-load-btn">
@@ -219,9 +223,33 @@ export default function LoadPage() {
           })}
         </div>
 
-        {/* Load History Chart */}
+        {/* Load History Chart with Date Range Selector (optional) */}
         <div className="glass-card rounded-2xl p-6" data-testid="load-history-chart">
-          <h3 className="font-rajdhani font-semibold text-lg mb-4">Load History</h3>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-4">
+            <h3 className="font-rajdhani font-semibold text-lg">Load History</h3>
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-muted-foreground" />
+              <input
+                type="date"
+                value={dateRange.start}
+                onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                className="bg-white/5 border border-white/10 rounded px-2 py-1 text-sm"
+              />
+              <span className="text-muted-foreground">to</span>
+              <input
+                type="date"
+                value={dateRange.end}
+                onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                className="bg-white/5 border border-white/10 rounded px-2 py-1 text-sm"
+              />
+              <Button size="sm" variant="outline" onClick={() => {
+                // TODO: Fetch history for selected date range
+                toast.info("Date range filtering coming soon");
+              }}>
+                Apply
+              </Button>
+            </div>
+          </div>
           {chartData.length > 0 ? (
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
