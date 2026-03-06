@@ -27,14 +27,34 @@ class BlynkService:
             return False
 
     async def get_pin_value(self, pin: str) -> str:
-        """Read a virtual pin value via Blynk HTTP API."""
+        """
+        Read a virtual pin value via Blynk HTTP API.
+        Returns a string representation of the value, or "0" on failure.
+        Handles various response formats: array, single number, error dict.
+        """
         url = f"{self.base_url}/get?token={self.token}&pin={pin}"
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as resp:
                     if resp.status == 200:
-                        data = await resp.json()
-                        return str(data[0]) if data else "0"
+                        try:
+                            data = await resp.json()
+                            # Expected: [value] (array with one element)
+                            if isinstance(data, list) and len(data) > 0:
+                                # Convert to string; if it's a number, str() works fine
+                                return str(data[0])
+                            elif isinstance(data, (int, float)):
+                                # Sometimes Blynk returns a single number directly
+                                return str(data)
+                            elif isinstance(data, dict) and "error" in data:
+                                logger.error(f"Blynk error for {pin}: {data['error']}")
+                                return "0"
+                            else:
+                                logger.warning(f"Unexpected Blynk response for {pin}: {data}")
+                                return "0"
+                        except Exception as e:
+                            logger.error(f"Blynk JSON parse error for {pin}: {e}")
+                            return "0"
                     else:
                         logger.error(f"Blynk get failed for {pin}: {resp.status}")
                         return "0"
