@@ -46,7 +46,6 @@ export default function LoadPage() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  // Prepare chart data from history (last 50 points)
   const chartData = loadData?.history?.map(item => ({
     ...item,
     time: item.timestamp ? format(parseISO(item.timestamp), 'HH:mm') : '',
@@ -68,31 +67,32 @@ export default function LoadPage() {
   const batterySoc = loadData?.battery_soc ?? 100;
   const params = current.params || { light: {}, fan: {}, pump: {} };
 
+  // UI renames: Light -> Fan, Pump -> Light, Fan -> Pump
   const loads = [
     {
       id: 'light',
-      name: 'Light',
-      icon: Lightbulb,
-      tierLabel: 'Essential',
-      description: 'Indoor lighting system',
+      displayName: 'Fan',
+      icon: Fan,
+      tierLabel: 'Semi-Essential',
+      description: 'Ventilation system',
       isOn: current.light_on || false,
       metrics: params.light
     },
     {
       id: 'fan',
-      name: 'Fan',
-      icon: Fan,
-      tierLabel: 'Semi-Essential',
-      description: 'Ventilation system',
+      displayName: 'Pump',
+      icon: Droplets,
+      tierLabel: 'Non-Essential',
+      description: 'Water pumping system',
       isOn: current.fan_on || false,
       metrics: params.fan
     },
     {
       id: 'pump',
-      name: 'Pump',
-      icon: Droplets,
-      tierLabel: 'Non-Essential',
-      description: 'Water pumping system',
+      displayName: 'Light',
+      icon: Lightbulb,
+      tierLabel: 'Essential',
+      description: 'Indoor lighting system',
       isOn: current.pump_on || false,
       metrics: params.pump
     }
@@ -113,7 +113,7 @@ export default function LoadPage() {
             </div>
             <div>
               <h1 className="font-rajdhani font-bold text-3xl tracking-tight">Load Monitoring</h1>
-              <p className="text-muted-foreground text-sm">Real‑time load parameters & history</p>
+              <p className="text-muted-foreground text-sm">Real‑time load parameters</p>
             </div>
           </div>
           <Button onClick={fetchData} variant="outline" className="btn-ghost" data-testid="refresh-load-btn">
@@ -184,7 +184,7 @@ export default function LoadPage() {
                     <Icon className={`w-6 h-6 ${load.isOn ? 'text-load' : 'text-muted-foreground'}`} />
                   </div>
                   <div>
-                    <h3 className="font-rajdhani font-semibold text-lg">{load.name}</h3>
+                    <h3 className="font-rajdhani font-semibold text-lg">{load.displayName}</h3>
                     <span className={`text-xs px-2 py-0.5 rounded-full ${
                       load.tierLabel === 'Essential' ? 'bg-battery/20 text-battery' :
                       load.tierLabel === 'Semi-Essential' ? 'bg-solar/20 text-solar' :
@@ -223,7 +223,7 @@ export default function LoadPage() {
           })}
         </div>
 
-        {/* Load History Chart with Date Range Selector (optional) */}
+        {/* Load History Chart */}
         <div className="glass-card rounded-2xl p-6" data-testid="load-history-chart">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-4">
             <h3 className="font-rajdhani font-semibold text-lg">Load History</h3>
@@ -242,10 +242,7 @@ export default function LoadPage() {
                 onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
                 className="bg-white/5 border border-white/10 rounded px-2 py-1 text-sm"
               />
-              <Button size="sm" variant="outline" onClick={() => {
-                // TODO: Fetch history for selected date range
-                toast.info("Date range filtering coming soon");
-              }}>
+              <Button size="sm" variant="outline" onClick={() => toast.info("Date range filtering coming soon")}>
                 Apply
               </Button>
             </div>
