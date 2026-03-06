@@ -325,7 +325,7 @@ async def get_load_data(payload: dict = Depends(verify_token)):
 
     load_data = data.load.model_dump()
     load_data.update(load_states)
-    load_data.update(load_metrics)                       # merge per‑load metrics
+    load_data["params"] = load_metrics                    # merge per‑load metrics
 
     predictions = await predictor.get_predictions()
     return {
