@@ -11,6 +11,7 @@ class BlynkService:
         self.base_url = BLYNK_BASE_URL
 
     async def set_value(self, pin: str, value: str) -> bool:
+        """Set a virtual pin value via Blynk HTTP API."""
         url = f"{self.base_url}/update?token={self.token}&pin={pin}&value={value}"
         try:
             async with aiohttp.ClientSession() as session:
@@ -26,6 +27,7 @@ class BlynkService:
             return False
 
     async def get_pin_value(self, pin: str) -> str:
+        """Read a virtual pin value via Blynk HTTP API."""
         url = f"{self.base_url}/get?token={self.token}&pin={pin}"
         try:
             async with aiohttp.ClientSession() as session:
@@ -41,6 +43,7 @@ class BlynkService:
             return "0"
 
     async def get_load_states(self) -> dict:
+        """Retrieve current on/off states of all loads from Blynk."""
         light = await self.get_pin_value("V31")
         fan = await self.get_pin_value("V32")
         pump = await self.get_pin_value("V30")
@@ -50,37 +53,31 @@ class BlynkService:
             "pump_on": pump == "1"
         }
 
-    # NEW: Get per-load parameters (voltage, current, power)
-    async def get_load_params(self) -> dict:
-        # Pump (V30 is state, V10=V, V11=I, V12=P)
-        pump_v = await self.get_pin_value("V10")
-        pump_i = await self.get_pin_value("V11")
-        pump_p = await self.get_pin_value("V12")
-        # Light (V31 state, V14=V, V15=I, V16=P)
-        light_v = await self.get_pin_value("V14")
-        light_i = await self.get_pin_value("V15")
-        light_p = await self.get_pin_value("V16")
-        # Fan (V32 state, V18=V, V19=I, V20=P)
-        fan_v = await self.get_pin_value("V18")
-        fan_i = await self.get_pin_value("V19")
-        fan_p = await self.get_pin_value("V20")
+    async def get_load_metrics(self) -> dict:
+        """Retrieve per‑load voltage, current, and power from Blynk."""
+        def safe_float(val):
+            try:
+                return float(val) if val else 0.0
+            except (ValueError, TypeError):
+                return 0.0
+
+        # Pump: V10 = voltage, V11 = current, V12 = power
+        pump_v = safe_float(await self.get_pin_value("V10"))
+        pump_i = safe_float(await self.get_pin_value("V11"))
+        pump_p = safe_float(await self.get_pin_value("V12"))
+        # Light: V14 = voltage, V15 = current, V16 = power
+        light_v = safe_float(await self.get_pin_value("V14"))
+        light_i = safe_float(await self.get_pin_value("V15"))
+        light_p = safe_float(await self.get_pin_value("V16"))
+        # Fan: V18 = voltage, V19 = current, V20 = power
+        fan_v = safe_float(await self.get_pin_value("V18"))
+        fan_i = safe_float(await self.get_pin_value("V19"))
+        fan_p = safe_float(await self.get_pin_value("V20"))
 
         return {
-            "pump": {
-                "voltage": float(pump_v),
-                "current": float(pump_i),
-                "power": float(pump_p)
-            },
-            "light": {
-                "voltage": float(light_v),
-                "current": float(light_i),
-                "power": float(light_p)
-            },
-            "fan": {
-                "voltage": float(fan_v),
-                "current": float(fan_i),
-                "power": float(fan_p)
-            }
+            "light": {"voltage": light_v, "current": light_i, "power": light_p},
+            "fan": {"voltage": fan_v, "current": fan_i, "power": fan_p},
+            "pump": {"voltage": pump_v, "current": pump_i, "power": pump_p}
         }
 
 # Singleton instance
