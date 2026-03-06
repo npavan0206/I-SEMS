@@ -319,13 +319,23 @@ async def get_load_data(payload: dict = Depends(verify_token)):
                 "current": parse_float(feed.get('field8'))
             })
 
-    # Get load states and per‑load metrics from Blynk
-    load_states = await blynk.get_load_states()          # returns {light_on, fan_on, pump_on}
-    load_metrics = await blynk.get_load_metrics()        # returns per‑load voltage, current, power
+    # Get load states and per‑load metrics with fallback
+    load_states = {"light_on": False, "fan_on": False, "pump_on": False}
+    load_metrics = {"light": {}, "fan": {}, "pump": {}}
+    
+    try:
+        load_states = await blynk.get_load_states()
+    except Exception as e:
+        logger.error(f"Failed to get load states: {e}")
+
+    try:
+        load_metrics = await blynk.get_load_metrics()   # correct method name
+    except Exception as e:
+        logger.error(f"Failed to get load metrics: {e}")
 
     load_data = data.load.model_dump()
     load_data.update(load_states)
-    load_data["params"] = load_metrics                    # merge per‑load metrics
+    load_data["params"] = load_metrics
 
     predictions = await predictor.get_predictions()
     return {
@@ -333,7 +343,7 @@ async def get_load_data(payload: dict = Depends(verify_token)):
         "history": history,
         "predictions": {"load_demand_1h": predictions['linear_regression'].get('load_demand_1h', 0)},
         "device_online": data.device_online,
-        "battery_soc": data.battery.soc                  # needed for pump lock
+        "battery_soc": data.battery.soc
     }
 
 @api_router.post("/load/control")
@@ -344,7 +354,7 @@ async def control_load(control: LoadControl, payload: dict = Depends(verify_toke
         raise HTTPException(status_code=400, detail="Cannot enable pump: Battery SOC below 20%. Pump locked.")
     if control.device == "light" and control.state and data.battery.soc < 10:
         raise HTTPException(status_code=400, detail="Critical battery level: Only essential loads allowed.")
-    # ✅ CORRECTED pin mapping: light V31, fan V32, pump V30 (matching Arduino)
+    # Correct pin mapping: light V31, fan V32, pump V30
     pin_map = {"light": "V31", "fan": "V32", "pump": "V30"}
     pin = pin_map.get(control.device)
     if not pin:
