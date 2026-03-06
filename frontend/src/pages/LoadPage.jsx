@@ -72,7 +72,7 @@ export default function LoadPage() {
     {
       id: 'light',
       name: 'Light',
-      icon: Lightbulf,
+      icon: Lightbulb,
       tierLabel: 'Essential',
       description: 'Indoor lighting system',
       isOn: current.light_on || false,
