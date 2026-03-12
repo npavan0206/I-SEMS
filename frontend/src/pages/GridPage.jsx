@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Navbar } from '@/components/dashboard/Navbar';
 import { api } from '@/services/api';
 import { Button } from '@/components/ui/button';
-import { Zap, RefreshCw, Power, Activity, Wifi, WifiOff } from 'lucide-react';
+import { Zap, RefreshCw, Power, Activity, Wifi, WifiOff, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function GridPage() {
@@ -62,23 +62,35 @@ export default function GridPage() {
       name: 'Solar Priority',
       description: 'Maximize solar usage. Use grid only when solar is insufficient.',
       icon: '☀️',
-      color: 'solar'
+      colorClass: 'solar'
     },
     {
       id: 'battery',
       name: 'Battery Priority',
       description: 'Use battery first. Charge from solar, minimal grid usage.',
       icon: '🔋',
-      color: 'battery'
+      colorClass: 'battery'
     },
     {
       id: 'hybrid',
       name: 'Hybrid Mode',
       description: 'Intelligent switching between solar, battery, and grid.',
       icon: '⚡',
-      color: 'primary'
+      colorClass: 'primary'
     }
   ];
+
+  // Helper to get the appropriate class for the selected mode card
+  const getModeCardClass = (modeId) => {
+    const base = 'p-6 rounded-xl text-left transition-all duration-200 border ';
+    if (currentMode === modeId) {
+      // Apply glowing border and background based on mode
+      if (modeId === 'solar') return base + 'border-solar/50 bg-solar/20 shadow-glow-solar';
+      if (modeId === 'battery') return base + 'border-battery/50 bg-battery/20 shadow-glow-battery';
+      if (modeId === 'hybrid') return base + 'border-primary/50 bg-primary/20 shadow-glow-primary';
+    }
+    return base + 'border-white/10 bg-white/5 hover:bg-white/10';
+  };
 
   return (
     <div className="min-h-screen bg-background grid-pattern" data-testid="grid-page">
@@ -236,25 +248,21 @@ export default function GridPage() {
                 onClick={() => handleModeChange(mode.id)}
                 disabled={settingMode || !deviceOnline}
                 data-testid={`mode-${mode.id}`}
-                className={`
-                  p-6 rounded-xl text-left transition-all duration-200
-                  ${currentMode === mode.id 
-                    ? `bg-${mode.color}/20 border-2 border-${mode.color}/50 shadow-lg` 
-                    : 'bg-white/5 border border-white/10 hover:bg-white/10'}
-                  ${settingMode || !deviceOnline ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-                `}
+                className={getModeCardClass(mode.id)}
               >
                 <div className="flex items-center gap-3 mb-3">
                   <span className="text-2xl">{mode.icon}</span>
-                  <h4 className={`font-rajdhani font-semibold ${currentMode === mode.id ? `text-${mode.color}` : ''}`}>
+                  <h4 className={`font-rajdhani font-semibold ${
+                    currentMode === mode.id ? `text-${mode.colorClass}` : ''
+                  }`}>
                     {mode.name}
                   </h4>
                 </div>
                 <p className="text-sm text-muted-foreground">{mode.description}</p>
                 {currentMode === mode.id && (
                   <div className="mt-3 flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full bg-${mode.color} animate-pulse`} />
-                    <span className="text-xs text-muted-foreground">Active</span>
+                    <CheckCircle className={`w-5 h-5 text-${mode.colorClass}`} />
+                    <span className={`text-xs text-${mode.colorClass}`}>Active</span>
                   </div>
                 )}
               </button>
